@@ -75,7 +75,7 @@ def import_parquet(engine, table_name, local_filename):
 
         rows = [
             {col: clean_parquet_data(col, data[col][i]) for col in data}
-            for i in range(len(data))
+            for i in range(len(batch))
         ]
 
         stmt = pg_insert(table).values(rows)
