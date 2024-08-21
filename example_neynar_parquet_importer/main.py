@@ -42,7 +42,6 @@ def main():
 
             import_parquet(db_engine, table_name, full_filename)
 
-
         # TODO V0: check database to see if we've already imported an incremental that is newer than this full. also allow forcing with a flag
 
         # TODO V1: subscribe to the SNS topic
@@ -59,11 +58,15 @@ if __name__ == "__main__":
 
     # TODO: check env var to enable json logging
     # TODO: INFO level for s3transfer
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
-    logging.getLogger('s3transfer').setLevel(logging.INFO)
-    logging.getLogger('botocore').setLevel(logging.INFO)
-    logging.getLogger('urllib3').setLevel(logging.INFO)
+    logging.getLogger("s3transfer").setLevel(logging.INFO)
+    logging.getLogger("botocore").setLevel(logging.INFO)
+    logging.getLogger("urllib3").setLevel(logging.INFO)
 
     if os.getenv("DEBUG") == "true":
         with launch_ipdb_on_exception():

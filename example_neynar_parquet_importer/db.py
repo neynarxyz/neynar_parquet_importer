@@ -11,13 +11,14 @@ JSON_COLUMNS = [
     "mentions_positions",
 ]
 
+
 def init_db(uri):
     # TODO: how do we set a custom schema?
     engine = create_engine(uri)
 
     logging.info("migrating...")
     with engine.connect() as connection:
-        with open('schema.sql', 'r') as f:
+        with open("schema.sql", "r") as f:
             connection.execute(text(f.read()))
 
         # TODO: honestly not sure why i need this. i thought it would auto commit
@@ -27,12 +28,13 @@ def init_db(uri):
 
     return engine
 
+
 def check_import_status(engine, file_key, check_last=False):
     with engine.connect() as connection:
         query = "SELECT * FROM parquet_import_tracking WHERE file_key = :file_key ORDER BY imported_at DESC"
         result = connection.execute(text(query), {"file_key": f"{file_key}"}).fetchone()
         if check_last:
-            return result['imported_at'] if result else None
+            return result["imported_at"] if result else None
         return result is not None
 
 
@@ -61,7 +63,9 @@ def import_parquet(engine, table_name, local_filename):
 
     # Read the data in chunks
     for i in range(num_row_groups):
-        logging.info("upsert #%s/%s for %s...", f"{i+1:_}", f"{num_row_groups:_}", table_name)
+        logging.info(
+            "upsert #%s/%s for %s...", f"{i+1:_}", f"{num_row_groups:_}", table_name
+        )
 
         batch = parquet_file.read_row_group(i)
 
@@ -78,7 +82,7 @@ def import_parquet(engine, table_name, local_filename):
 
         upsert_stmt = stmt.on_conflict_do_update(
             index_elements=table.primary_key.columns.values(),
-            set_={col: stmt.excluded[col] for col in data.keys()}
+            set_={col: stmt.excluded[col] for col in data.keys()},
         )
 
         conn.execute(upsert_stmt)

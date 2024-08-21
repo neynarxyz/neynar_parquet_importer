@@ -31,7 +31,9 @@ def download_latest_full(table_name):
         return local_file_path
 
     logging.info("Downloading to %s...", local_file_path)
-    S3_CLIENT.download_file(BUCKET_NAME, FULL_PARQUET_S3_URI + "/" + full_name, local_file_path)
+    S3_CLIENT.download_file(
+        BUCKET_NAME, FULL_PARQUET_S3_URI + "/" + full_name, local_file_path
+    )
 
     return local_file_path
 
