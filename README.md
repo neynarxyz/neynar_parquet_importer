@@ -1,17 +1,28 @@
-# Neynar Parquet Importer
+# Example Neynar Parquet Importer
 
-The MVP design is just going to print imported data to the terminal.
+Download parquet exports from Neynar and import them into a Postgres database.
 
-The next design should write the data into a SQL database. Make it easy to use Postgres/MySQL/MyRocks/etc. Anything supported by sqlalchemy
+The script will load a "full" export once at the start.
 
-I think an example that uses Spark could be useful.
+Once the backfill of the "full" export is complete, it will start importing the "incremental" exports.
 
-## Backfill
+Sometimes the network is quiet and the parquet file is empty. When this happens, Neynar exports a `.empty` file. We had some troubles with schema detection with actually empty `.parquet` files and this was a simple solution.
 
-You'll need to load a "full" export at least once. If the schema ever changes, it will likely be necessary to load a "full" backup again.
+## Setup
 
-## Stream
+Set up your configuration. Copy this file and then add your secrets to it:
 
-Once the backfill of the "full" export is complete, you can start importing the "incremental" exports.
+    cp env.example .env
 
-Sometimes the network is quiet and the parquet file would be empty. When this happens, we upload a `.empty` file. We had some troubles with schema detection with actually empty `.parquet` files and this was a simple solution.
+Run a postgres and the app inside of docker:
+
+    docker compose up --build -d
+
+NOTE: Older systems might use `docker-compose` instead of `docker compose`
+
+## Todo
+
+- Import everything in parallel
+- Track files that have already been imported
+- If the schema ever changes, it will likely be necessary to load a "full" backup again. There will be an env var to force this
+- Track SNS queue instead of polling
