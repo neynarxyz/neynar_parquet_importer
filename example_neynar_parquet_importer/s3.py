@@ -27,7 +27,7 @@ def download_latest_full(table_name):
     local_file_path = os.path.join(LOCAL_FULL_DIR, full_name)
 
     if os.path.exists(local_file_path):
-        logging.info("File already exists locally. Skipping download.")
+        logging.info("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
     logging.info("Downloading to %s...", local_file_path)

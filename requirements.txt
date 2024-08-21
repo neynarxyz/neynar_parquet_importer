@@ -6,16 +6,12 @@
 #
 asttokens==2.4.1
     # via stack-data
-boto3==1.35.0
+boto3==1.35.3
     # via example_neynar_parquet_importer (setup.py)
-botocore==1.35.0
+botocore==1.35.3
     # via
     #   boto3
     #   s3transfer
-d6tcollect==1.0.6
-    # via d6tstack
-d6tstack==0.2.0
-    # via example_neynar_parquet_importer (setup.py)
 decorator==5.1.1
     # via
     #   ipdb
@@ -35,15 +31,7 @@ jmespath==1.0.1
 matplotlib-inline==0.1.7
     # via ipython
 numpy==2.1.0
-    # via
-    #   d6tstack
-    #   pandas
-    #   pyarrow
-    #   scipy
-pandas==2.2.2
-    # via
-    #   d6tstack
-    #   example_neynar_parquet_importer (setup.py)
+    # via pyarrow
 parso==0.8.4
     # via jedi
 pexpect==4.9.0
@@ -61,25 +49,17 @@ pyarrow==17.0.0
 pygments==2.18.0
     # via ipython
 python-dateutil==2.9.0.post0
-    # via
-    #   botocore
-    #   pandas
+    # via botocore
 python-dotenv==1.0.1
     # via example_neynar_parquet_importer (setup.py)
-pytz==2024.1
-    # via pandas
 s3transfer==0.10.2
     # via boto3
-scipy==1.14.0
-    # via d6tstack
 six==1.16.0
     # via
     #   asttokens
     #   python-dateutil
 sqlalchemy==2.0.32
-    # via
-    #   d6tstack
-    #   example_neynar_parquet_importer (setup.py)
+    # via example_neynar_parquet_importer (setup.py)
 stack-data==0.6.3
     # via ipython
 traitlets==5.14.3
@@ -88,8 +68,6 @@ traitlets==5.14.3
     #   matplotlib-inline
 typing-extensions==4.12.2
     # via sqlalchemy
-tzdata==2024.1
-    # via pandas
 urllib3==2.2.2
     # via botocore
 wcwidth==0.2.13

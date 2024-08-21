@@ -1,12 +1,15 @@
+import json
 import os
-import d6tstack
 import logging
-import pandas as pd
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-CHUNK_SIZE = 10_000
+JSON_COLUMNS = [
+    "embeds",
+    "mentions",
+    "mentions_positions",
+]
 
 def init_db(uri):
     # TODO: how do we set a custom schema?
@@ -33,8 +36,13 @@ def check_import_status(engine, file_key, check_last=False):
         return result is not None
 
 
-# TODO: hard code index column?
-def import_full(engine, table_name, local_filename):
+def clean_parquet_data(col, value):
+    if col in JSON_COLUMNS:
+        return json.loads(value)
+    return value
+
+
+def import_parquet(engine, table_name, local_filename):
     assert table_name in local_filename
 
     metadata = MetaData()
@@ -46,19 +54,26 @@ def import_full(engine, table_name, local_filename):
 
     # TODO: save this file into the tracking table and save the id for later
 
-    # TODO: chunk size seems to have some maximum set outside our control
-    for (i, batch) in enumerate(pq.read_table(local_filename).to_batches(CHUNK_SIZE)):
+    parquet_file = pq.ParquetFile(local_filename)
+
+    # Get the number of row groups in the file
+    num_row_groups = parquet_file.num_row_groups
+
+    # Read the data in chunks
+    for i in range(num_row_groups):
+        logging.info("upsert #%s/%s for %s...", f"{i+1:_}", f"{num_row_groups:_}", table_name)
+
+        batch = parquet_file.read_row_group(i)
+
         data = batch.to_pydict()
 
         # TODO: add the tracking table id to the data
 
         rows = [
-            {col: data[col][i] for col in data}
+            {col: clean_parquet_data(col, data[col][i]) for col in data}
             for i in range(len(data))
         ]
 
-        logging.info("upserting %s #%s...", table_name, i)
-    
         stmt = pg_insert(table).values(rows)
 
         upsert_stmt = stmt.on_conflict_do_update(

@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS public.parquet_import_tracking (
-    id SERIAL PRIMARY KEY,
+    id bigint PRIMARY KEY,
     file_key VARCHAR UNIQUE,
     file_hash VARCHAR,
     is_full BOOLEAN DEFAULT FALSE,
@@ -9,34 +9,12 @@ CREATE TABLE IF NOT EXISTS public.parquet_import_tracking (
 
 -- TODO: index on parquet_import_tracking.imported_at
 
--- TODO: all the below tables were copied from replicator_v1. i think theres some things to clean up
-
--- create messages first because other tables depend on it
-CREATE TABLE IF NOT EXISTS public.messages
-(
-    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
-    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp without time zone,
-    pruned_at timestamp without time zone,
-    revoked_at timestamp without time zone,
-    "timestamp" timestamp without time zone NOT NULL,
-    message_type smallint NOT NULL,
-    fid bigint NOT NULL,
-    hash bytea NOT NULL,
-    hash_scheme smallint NOT NULL,
-    signature bytea NOT NULL,
-    signature_scheme smallint NOT NULL,
-    signer bytea NOT NULL,
-    "raw" bytea NOT NULL,
-    CONSTRAINT messages_pkey PRIMARY KEY (id),
-    CONSTRAINT messages_hash_unique UNIQUE (hash)
-);
-
+-- TODO: all the below tables schemas were initially copied from replicator_v1
+-- TODO: but parquet doesn't export the messages table. this complicates things. we can't use the upstream schema...
 
 CREATE TABLE IF NOT EXISTS public.casts
 (
-    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone,
@@ -52,12 +30,7 @@ CREATE TABLE IF NOT EXISTS public.casts
     mentions_positions smallint[] NOT NULL DEFAULT '{}'::smallint[],
     root_parent_hash bytea,
     root_parent_url text COLLATE pg_catalog."default",
-    CONSTRAINT casts_pkey PRIMARY KEY (id),
-    CONSTRAINT casts_hash_unique UNIQUE (hash),
-    CONSTRAINT casts_hash_foreign FOREIGN KEY (hash)
-        REFERENCES public.messages (hash) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
+    CONSTRAINT casts_hash_unique UNIQUE (hash)
 );
 
 CREATE TABLE IF NOT EXISTS public.fids
@@ -84,7 +57,7 @@ CREATE TABLE IF NOT EXISTS public.fnames
 
 CREATE TABLE IF NOT EXISTS public.links
 (
-    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    id bigint PRIMARY KEY,
     fid bigint,
     target_fid bigint,
     hash bytea NOT NULL,
@@ -94,7 +67,6 @@ CREATE TABLE IF NOT EXISTS public.links
     deleted_at timestamp without time zone,
     type text COLLATE pg_catalog."default",
     display_timestamp timestamp without time zone,
-    CONSTRAINT links_pkey PRIMARY KEY (id),
     CONSTRAINT links_fid_target_fid_type_unique UNIQUE (fid, target_fid, type),
     CONSTRAINT links_hash_unique UNIQUE (hash)
 );
@@ -102,7 +74,7 @@ CREATE TABLE IF NOT EXISTS public.links
 
 CREATE TABLE IF NOT EXISTS public.reactions
 (
-    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone,
@@ -113,17 +85,12 @@ CREATE TABLE IF NOT EXISTS public.reactions
     target_hash bytea,
     target_fid bigint,
     target_url text COLLATE pg_catalog."default",
-    CONSTRAINT reactions_pkey PRIMARY KEY (id),
-    CONSTRAINT reactions_hash_unique UNIQUE (hash),
-    CONSTRAINT reactions_hash_foreign FOREIGN KEY (hash)
-        REFERENCES public.messages (hash) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
+    CONSTRAINT reactions_hash_unique UNIQUE (hash)
 );
 
 CREATE TABLE IF NOT EXISTS public.signers
 (
-    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone,
@@ -134,13 +101,12 @@ CREATE TABLE IF NOT EXISTS public.signers
     signer bytea NOT NULL,
     name text COLLATE pg_catalog."default",
     app_fid bigint,
-    CONSTRAINT signers_pkey PRIMARY KEY (id),
     CONSTRAINT unique_timestamp_fid_signer UNIQUE ("timestamp", fid, signer)
 );
 
 CREATE TABLE IF NOT EXISTS public.storage
 (
-    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone,
@@ -148,13 +114,12 @@ CREATE TABLE IF NOT EXISTS public.storage
     fid bigint NOT NULL,
     units bigint NOT NULL,
     expiry timestamp without time zone NOT NULL,
-    CONSTRAINT storage_pkey PRIMARY KEY (id),
     CONSTRAINT unique_fid_units_expiry UNIQUE (fid, units, expiry)
 );
 
 CREATE TABLE IF NOT EXISTS public.user_data
 (
-    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone,
@@ -163,18 +128,13 @@ CREATE TABLE IF NOT EXISTS public.user_data
     hash bytea NOT NULL,
     type smallint NOT NULL,
     value text COLLATE pg_catalog."default" NOT NULL,
-    CONSTRAINT user_data_pkey PRIMARY KEY (id),
     CONSTRAINT user_data_fid_type_unique UNIQUE (fid, type),
-    CONSTRAINT user_data_hash_unique UNIQUE (hash),
-    CONSTRAINT user_data_hash_foreign FOREIGN KEY (hash)
-        REFERENCES public.messages (hash) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
+    CONSTRAINT user_data_hash_unique UNIQUE (hash)
 );
 
 CREATE TABLE IF NOT EXISTS public.verifications
 (
-    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone,
@@ -182,12 +142,7 @@ CREATE TABLE IF NOT EXISTS public.verifications
     fid bigint NOT NULL,
     hash bytea NOT NULL,
     claim jsonb NOT NULL,
-    CONSTRAINT verifications_pkey PRIMARY KEY (id),
-    CONSTRAINT verifications_hash_unique UNIQUE (hash),
-    CONSTRAINT verifications_hash_foreign FOREIGN KEY (hash)
-        REFERENCES public.messages (hash) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
+    CONSTRAINT verifications_hash_unique UNIQUE (hash)
 );
 
 CREATE TABLE IF NOT EXISTS public.warpcast_power_users
