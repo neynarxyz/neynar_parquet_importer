@@ -1,0 +1,200 @@
+CREATE TABLE IF NOT EXISTS public.parquet_import_tracking (
+    id SERIAL PRIMARY KEY,
+    file_key VARCHAR UNIQUE,
+    file_hash VARCHAR,
+    is_full BOOLEAN DEFAULT FALSE,
+    is_empty BOOLEAN DEFAULT FALSE,
+    imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- TODO: index on parquet_import_tracking.imported_at
+
+-- TODO: all the below tables were copied from replicator_v1. i think theres some things to clean up
+
+-- create messages first because other tables depend on it
+CREATE TABLE IF NOT EXISTS public.messages
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp without time zone,
+    pruned_at timestamp without time zone,
+    revoked_at timestamp without time zone,
+    "timestamp" timestamp without time zone NOT NULL,
+    message_type smallint NOT NULL,
+    fid bigint NOT NULL,
+    hash bytea NOT NULL,
+    hash_scheme smallint NOT NULL,
+    signature bytea NOT NULL,
+    signature_scheme smallint NOT NULL,
+    signer bytea NOT NULL,
+    "raw" bytea NOT NULL,
+    CONSTRAINT messages_pkey PRIMARY KEY (id),
+    CONSTRAINT messages_hash_unique UNIQUE (hash)
+);
+
+
+CREATE TABLE IF NOT EXISTS public.casts
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp without time zone,
+    "timestamp" timestamp without time zone NOT NULL,
+    fid bigint NOT NULL,
+    hash bytea NOT NULL,
+    parent_hash bytea,
+    parent_fid bigint,
+    parent_url text COLLATE pg_catalog."default",
+    text text COLLATE pg_catalog."default" NOT NULL,
+    embeds jsonb NOT NULL DEFAULT '{}'::jsonb,
+    mentions bigint[] NOT NULL DEFAULT '{}'::bigint[],
+    mentions_positions smallint[] NOT NULL DEFAULT '{}'::smallint[],
+    root_parent_hash bytea,
+    root_parent_url text COLLATE pg_catalog."default",
+    CONSTRAINT casts_pkey PRIMARY KEY (id),
+    CONSTRAINT casts_hash_unique UNIQUE (hash),
+    CONSTRAINT casts_hash_foreign FOREIGN KEY (hash)
+        REFERENCES public.messages (hash) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+);
+
+CREATE TABLE IF NOT EXISTS public.fids
+(
+    fid bigint NOT NULL,
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    custody_address bytea NOT NULL,
+    registered_at timestamp with time zone,
+    CONSTRAINT fids_pkey PRIMARY KEY (fid)
+);
+
+CREATE TABLE IF NOT EXISTS public.fnames
+(
+    fname text COLLATE pg_catalog."default" NOT NULL,
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    custody_address bytea,
+    expires_at timestamp without time zone,
+    fid bigint,
+    deleted_at timestamp without time zone,
+    CONSTRAINT fnames_pkey PRIMARY KEY (fname)
+);
+
+CREATE TABLE IF NOT EXISTS public.links
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    fid bigint,
+    target_fid bigint,
+    hash bytea NOT NULL,
+    "timestamp" timestamp without time zone NOT NULL,
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp without time zone,
+    type text COLLATE pg_catalog."default",
+    display_timestamp timestamp without time zone,
+    CONSTRAINT links_pkey PRIMARY KEY (id),
+    CONSTRAINT links_fid_target_fid_type_unique UNIQUE (fid, target_fid, type),
+    CONSTRAINT links_hash_unique UNIQUE (hash)
+);
+
+
+CREATE TABLE IF NOT EXISTS public.reactions
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp without time zone,
+    "timestamp" timestamp without time zone NOT NULL,
+    reaction_type smallint NOT NULL,
+    fid bigint NOT NULL,
+    hash bytea NOT NULL,
+    target_hash bytea,
+    target_fid bigint,
+    target_url text COLLATE pg_catalog."default",
+    CONSTRAINT reactions_pkey PRIMARY KEY (id),
+    CONSTRAINT reactions_hash_unique UNIQUE (hash),
+    CONSTRAINT reactions_hash_foreign FOREIGN KEY (hash)
+        REFERENCES public.messages (hash) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+);
+
+CREATE TABLE IF NOT EXISTS public.signers
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp without time zone,
+    "timestamp" timestamp without time zone NOT NULL,
+    fid bigint NOT NULL,
+    hash bytea,
+    custody_address bytea,
+    signer bytea NOT NULL,
+    name text COLLATE pg_catalog."default",
+    app_fid bigint,
+    CONSTRAINT signers_pkey PRIMARY KEY (id),
+    CONSTRAINT unique_timestamp_fid_signer UNIQUE ("timestamp", fid, signer)
+);
+
+CREATE TABLE IF NOT EXISTS public.storage
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp without time zone,
+    "timestamp" timestamp without time zone NOT NULL,
+    fid bigint NOT NULL,
+    units bigint NOT NULL,
+    expiry timestamp without time zone NOT NULL,
+    CONSTRAINT storage_pkey PRIMARY KEY (id),
+    CONSTRAINT unique_fid_units_expiry UNIQUE (fid, units, expiry)
+);
+
+CREATE TABLE IF NOT EXISTS public.user_data
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp without time zone,
+    "timestamp" timestamp without time zone NOT NULL,
+    fid bigint NOT NULL,
+    hash bytea NOT NULL,
+    type smallint NOT NULL,
+    value text COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT user_data_pkey PRIMARY KEY (id),
+    CONSTRAINT user_data_fid_type_unique UNIQUE (fid, type),
+    CONSTRAINT user_data_hash_unique UNIQUE (hash),
+    CONSTRAINT user_data_hash_foreign FOREIGN KEY (hash)
+        REFERENCES public.messages (hash) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+);
+
+CREATE TABLE IF NOT EXISTS public.verifications
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp without time zone,
+    "timestamp" timestamp without time zone NOT NULL,
+    fid bigint NOT NULL,
+    hash bytea NOT NULL,
+    claim jsonb NOT NULL,
+    CONSTRAINT verifications_pkey PRIMARY KEY (id),
+    CONSTRAINT verifications_hash_unique UNIQUE (hash),
+    CONSTRAINT verifications_hash_foreign FOREIGN KEY (hash)
+        REFERENCES public.messages (hash) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+);
+
+CREATE TABLE IF NOT EXISTS public.warpcast_power_users
+(
+    fid bigint NOT NULL,
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL,
+    deleted_at timestamp without time zone,
+    CONSTRAINT warpcast_power_users_pkey PRIMARY KEY (fid)
+);
