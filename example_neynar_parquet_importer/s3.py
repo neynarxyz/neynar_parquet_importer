@@ -22,6 +22,7 @@ if not os.path.exists(LOCAL_FULL_DIR):
 if not os.path.exists(LOCAL_INCREMENTAL_DIR):
     os.makedirs(LOCAL_INCREMENTAL_DIR)
 
+
 def download_latest_full(table_name):
     logging.info("Downloading the latest full backup...")
 
@@ -31,7 +32,7 @@ def download_latest_full(table_name):
     local_file_path = os.path.join(LOCAL_FULL_DIR, full_name)
 
     if os.path.exists(local_file_path):
-        logging.info("%s already exists locally. Skipping download.", local_file_path)
+        logging.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
     logging.info("Downloading to %s...", local_file_path)
@@ -54,13 +55,13 @@ def download_incremental(tablename, start_timestamp, duration):
     local_empty_path = os.path.join(LOCAL_INCREMENTAL_DIR, empty_name)
 
     if os.path.exists(local_parquet_path):
-        logging.info(
+        logging.debug(
             "%s already exists locally. Skipping download.", local_parquet_path
         )
         return local_parquet_path
 
     if os.path.exists(local_empty_path):
-        logging.info("%s already exists locally. Skipping download", local_empty_path)
+        logging.debug("%s already exists locally. Skipping download", local_empty_path)
         return local_empty_path
 
     # Try downloading with ".parquet" extension first
@@ -74,7 +75,7 @@ def download_incremental(tablename, start_timestamp, duration):
 
         return local_parquet_path
     except botocore.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == '404':
+        if e.response["Error"]["Code"] == "404":
             pass
         else:
             raise
@@ -90,7 +91,7 @@ def download_incremental(tablename, start_timestamp, duration):
 
         return local_empty_path
     except botocore.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == '404':
+        if e.response["Error"]["Code"] == "404":
             pass
         else:
             raise

@@ -17,14 +17,14 @@ INCREMENTAL_SECONDS = 5 * 60
 # TODO: messages and reactions are not part of parquet exports
 TABLES = [
     # "casts",
-    "fids",
+    # "fids",
     # "fnames",
     # "links",
     # "signers",
     # "storage",
     # "user_data",
     # "verifications",
-    # "warpcast_power_users",
+    "warpcast_power_users",
     # # TODO: this is a view, so we might not need to import it depending on the target db
     # "profile_with_addresses",
 ]
@@ -43,8 +43,7 @@ def main():
         if full_filename is None:
             full_filename = download_latest_full(table_name)
 
-            # # TODO: turn this back on once done debugging
-            # import_parquet(db_engine, table_name, full_filename)
+            import_parquet(db_engine, table_name, full_filename)
 
             match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", full_filename)
             if match:
