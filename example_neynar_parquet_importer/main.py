@@ -39,7 +39,6 @@ TABLES = [
     # "user_data",
     # "verifications",
     # "warpcast_power_users",
-    # # TODO: this can be a view, if they have the relevant tables
     "profile_with_addresses",
 ]
 
@@ -69,7 +68,7 @@ def sync_parquet_to_db(
         )
 
         import_parquet(
-            db_engine, table_name, full_filename, steps_progress, full_steps_id
+            db_engine, table_name, full_filename, "full", steps_progress, full_steps_id
         )
 
         match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", full_filename)
@@ -121,6 +120,7 @@ def sync_parquet_to_db(
             db_engine,
             table_name,
             incremental_filename,
+            "incremental",
             steps_progress,
             incremental_steps_id,
         )
@@ -162,6 +162,8 @@ def main():
             ),
         )
 
+        # this only shows in a terminal. it does not show in docker logs
+        # TODO: send a periodic log message to show progress in docker logs
         live = stack.enter_context(Live(progress_table, refresh_per_second=10))
 
         table_executor = stack.enter_context(
@@ -220,7 +222,7 @@ if __name__ == "__main__":
     )
 
     # TODO: env vars to control logging
-    logging.getLogger("app").setLevel(logging.INFO)
+    logging.getLogger("app").setLevel(logging.DEBUG)
     logging.getLogger("s3transfer").setLevel(logging.INFO)
     logging.getLogger("boto3").setLevel(logging.INFO)
     logging.getLogger("botocore").setLevel(logging.INFO)

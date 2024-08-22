@@ -8,6 +8,8 @@ Once the backfill of the "full" export is complete, it will start importing the 
 
 Sometimes the network is quiet and the parquet file is empty. When this happens, Neynar exports a `.empty` file. We had some troubles with schema detection with actually empty `.parquet` files and this was a simple solution.
 
+The database is set up by a simple `.sql` file that runs when the app starts. Theres so many ways to do migrations and I didn't want to force a library on you.
+
 ## Setup
 
 Set up your configuration. Copy this file and then add your secrets to it:
@@ -30,6 +32,7 @@ NOTE: Older systems might use `docker-compose` instead of `docker compose`
 - Crontab entry to delete old files
 - "Downloaded:" log message should include file age
 - allow custom postgres schema instead of always putting into public
+- Store the ETAG in the database so we can compare file hashes
 
 ## Open Questions
 

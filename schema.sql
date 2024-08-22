@@ -1,13 +1,20 @@
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'file_type_enum') THEN
+        CREATE TYPE file_type_enum AS ENUM ('full', 'incremental');
+    END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.parquet_import_tracking (
-    id bigint PRIMARY KEY,
-    file_key VARCHAR UNIQUE,
-    file_etag VARCHAR,
-    is_full BOOLEAN DEFAULT FALSE,
-    is_empty BOOLEAN DEFAULT FALSE,
-    imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id BIGSERIAL PRIMARY KEY,
+    file_name VARCHAR UNIQUE,
+    file_type file_type_enum,
+    is_empty BOOLEAN,
+    imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_row_group_imported INT DEFAULT NULL
 );
 
--- TODO: index on parquet_import_tracking.imported_at
+CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_imported_at ON public.parquet_import_tracking(imported_at);
 
 CREATE TABLE IF NOT EXISTS public.casts
 (
