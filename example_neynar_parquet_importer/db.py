@@ -44,6 +44,18 @@ def clean_parquet_data(col, value):
     return value
 
 
+def humanize_time(seconds):
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    elif seconds < 3600:
+        minutes = int(seconds // 60)
+        return f"{minutes}m"
+    else:
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        return f"{hours}h {minutes}m"
+
+
 def import_parquet(engine, table_name, local_filename):
     assert table_name in local_filename
 
@@ -98,13 +110,17 @@ def import_parquet(engine, table_name, local_filename):
         estimated_total_time = average_time_per_group * num_row_groups
         estimated_time_remaining = average_time_per_group * remaining_groups
 
+        elapsed_time_human = humanize_time(elapsed_time)
+        estimated_total_time_human = humanize_time(estimated_total_time)
+        estimated_time_remaining_human = humanize_time(estimated_time_remaining)
+
         # TODO: humanize the seconds
         logging.info(
-            "Upsert #%s/%s for %s. Elapsed: %.2fs, Total: ~%.2fs, Remaining: ~%.2fs",
+            "Upsert #%s/%s for %s. Elapsed: %s, Total: ~%s, Remaining: ~%s",
             f"{i+1:_}",
             f"{num_row_groups:_}",
             table_name,
-            elapsed_time,
-            estimated_total_time,
-            estimated_time_remaining,
+            elapsed_time_human,
+            estimated_total_time_human,
+            estimated_time_remaining_human,
         )
