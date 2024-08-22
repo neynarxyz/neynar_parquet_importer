@@ -57,7 +57,7 @@ def humanize_time(seconds):
         return f"{hours}h {minutes}m"
 
 
-def import_parquet(engine, table_name, local_filename, progress, chunks_read_id):
+def import_parquet(engine, table_name, local_filename, progress, progress_id):
     assert table_name in local_filename
 
     metadata = MetaData()
@@ -76,17 +76,17 @@ def import_parquet(engine, table_name, local_filename, progress, chunks_read_id)
 
     # update the progress counter with our new step total
     with PROGRESS_CHUNKS_LOCK:
-        new_total = progress.tasks[chunks_read_id].total + num_row_groups
+        new_total = progress.tasks[progress_id].total + num_row_groups
 
-        LOGGER.info("New total steps from %s: %s", table_name, f"{new_total:_}")
+        LOGGER.debug(
+            "New total steps for %s %s: %s", progress_id, table_name, f"{new_total:_}"
+        )
 
-        progress.update(chunks_read_id, total=new_total)
+        progress.update(progress_id, total=new_total)
 
         # Force a refresh to update the timer and other statistics
         # TODO: this makes the time flicker too much
         # progress.refresh()
-
-    LOGGER.info("lock closed for %s", table_name)
 
     # start_time = time.time()
 
@@ -139,4 +139,4 @@ def import_parquet(engine, table_name, local_filename, progress, chunks_read_id)
         #     estimated_time_remaining_human,
         # )
 
-        progress.update(chunks_read_id, advance=1)
+        progress.update(progress_id, advance=1)

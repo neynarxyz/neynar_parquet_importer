@@ -95,7 +95,7 @@ def download_incremental(
         # TODO: get filesize before downloading for the progress bar
         latest_size_bytes = S3_CLIENT.head_object(
             Bucket=BUCKET_NAME, Key=INCREMENTAL_PARQUET_S3_URI + "/" + parquet_name
-        )['ContentLength']
+        )["ContentLength"]
 
         callback = ProgressCallback(
             progress, bytes_downloaded_id, latest_size_bytes, PROGRESS_BYTES_LOCK
@@ -124,7 +124,7 @@ def download_incremental(
             INCREMENTAL_PARQUET_S3_URI + "/" + empty_name,
             local_empty_path,
         )
-        LOGGER.info(f"Downloaded empty: %s", local_empty_path)
+        LOGGER.debug(f"Downloaded empty: %s", local_empty_path)
 
         return local_empty_path
     except botocore.exceptions.ClientError as e:

@@ -9,7 +9,17 @@ from ipdb import launch_ipdb_on_exception
 from rich.logging import RichHandler
 from rich.live import Live
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, MofNCompleteColumn, FileSizeColumn, TotalFileSizeColumn, DownloadColumn, TransferSpeedColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    BarColumn,
+    TextColumn,
+    MofNCompleteColumn,
+    FileSizeColumn,
+    TotalFileSizeColumn,
+    DownloadColumn,
+    TransferSpeedColumn,
+)
 from rich.table import Table
 
 from example_neynar_parquet_importer.db import import_parquet, init_db
@@ -24,10 +34,11 @@ INCREMENTAL_SECONDS = 5 * 60
 # TODO: env var to choose the tables that we care about
 # TODO: messages and reactions are not part of parquet exports
 TABLES = [
-    "casts",
-    "fids",
-    "fnames",
-    "links",
+    # "casts",
+    # "fids",
+    # "fnames",
+    # "links",
+    "reactions",
     # "signers",
     # "storage",
     # "user_data",
@@ -45,7 +56,7 @@ def sync_parquet_to_db(
     bytes_downloaded_id,
     chunks_progress,
     full_steps_id,
-    incremental_steps_id
+    incremental_steps_id,
 ):
     """Function that runs forever (barring exceptions) to download and import parquet files for a table.
 
