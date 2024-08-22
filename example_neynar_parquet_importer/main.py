@@ -17,7 +17,11 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from example_neynar_parquet_importer.db import import_parquet, init_db
+from example_neynar_parquet_importer.db import (
+    check_for_existing_full_import,
+    import_parquet,
+    init_db,
+)
 from example_neynar_parquet_importer.s3 import (
     download_incremental,
     download_latest_full,
@@ -59,34 +63,28 @@ def sync_parquet_to_db(
     """
 
     # TODO V0: check database to see if we've already imported a full. also allow forcing with a flag
-    full_filename = None
+    full_filename = check_for_existing_full_import(db_engine, table_name)
 
-    # if no full export, download the latest one
     if full_filename is None:
+        # if no full export, download the latest one
         full_filename = download_latest_full(
             table_name, bytes_progress, full_bytes_downloaded_id
         )
 
-        import_parquet(
-            db_engine, table_name, full_filename, "full", steps_progress, full_steps_id
-        )
+    import_parquet(
+        db_engine, table_name, full_filename, "full", steps_progress, full_steps_id
+    )
 
-        match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", full_filename)
-        if match:
-            # db_name = match.group(1)
-            # table_name = match.group(2)
-            # start_timestamp = match.group(3)
-            next_start_timestamp = int(match.group(4))
-        else:
-            raise ValueError(
-                "Full filename does not match expected format.", full_filename
-            )
+    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", full_filename)
+    if match:
+        # db_name = match.group(1)
+        # table_name = match.group(2)
+        # start_timestamp = match.group(3)
+        next_start_timestamp = int(match.group(4))
     else:
-        # TODO V0: check database to see if we've already imported an incremental that is newer than this full. also allow forcing with a flag
+        raise ValueError("Full filename does not match expected format.", full_filename)
 
-        next_start_timestamp = NotImplemented
-
-    # TODO V1: subscribe to the SNS topic and read from it instead of polling
+    # TODO: subscribe to the SNS topic and read from it instead of polling
 
     # download all the incrementals. loops forever
     while True:
@@ -222,7 +220,7 @@ if __name__ == "__main__":
     )
 
     # TODO: env vars to control logging
-    logging.getLogger("app").setLevel(logging.DEBUG)
+    logging.getLogger("app").setLevel(logging.INFO)
     logging.getLogger("s3transfer").setLevel(logging.INFO)
     logging.getLogger("boto3").setLevel(logging.INFO)
     logging.getLogger("botocore").setLevel(logging.INFO)

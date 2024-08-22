@@ -24,6 +24,12 @@ NOTE: Older systems might use `docker-compose` instead of `docker compose`
 
 ## Developing
 
+
+
+Stop the docker version of the app:
+
+    docker compose stop app
+
 Set up the python environment
 
     python3.12 -m .venv venv
@@ -53,6 +59,9 @@ NOTE: INTERACTIVE_DEBUG makes python open a shell if an exception happens. This 
 - "Downloaded:" log message should include file age
 - allow custom postgres schema instead of always putting into public
 - Store the ETAG in the database so we can compare file hashes
+- recommended specs/storage for an EC2 server (disk size for parquet)
+- recommended specs/storage space for postgres cluster (disk size for postgres)
+- run on an EC2 and collect example timings
 
 ## Open Questions
 

@@ -43,9 +43,6 @@ def download_latest_full(table_name, progress, progress_id):
 
     full_name = latest_file["Key"].split("/")[-1]
 
-    full_name = f"farcaster-{table_name}-0-1724173200.parquet"
-    LOGGER.warning("overriding full_name during development")
-
     local_file_path = os.path.join(LOCAL_FULL_DIR, full_name)
 
     if os.path.exists(local_file_path):

@@ -8,6 +8,8 @@ PROGRESS_CHUNKS_LOCK = Lock()
 
 
 class ProgressCallback:
+    """Helper class for updating the progress bars in a thread-safe way."""
+
     def __init__(self, progress, task_id, more_steps, lock):
         self.progress = progress
         self.task_id = task_id

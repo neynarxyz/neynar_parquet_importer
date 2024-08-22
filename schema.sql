@@ -7,13 +7,16 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS public.parquet_import_tracking (
     id BIGSERIAL PRIMARY KEY,
+    table_name VARCHAR NOT NULL,
     file_name VARCHAR UNIQUE,
     file_type file_type_enum,
     is_empty BOOLEAN,
     imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_row_group_imported INT DEFAULT NULL
+    last_row_group_imported INT DEFAULT NULL,
+    total_row_groups INT NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_table_name ON public.parquet_import_tracking(table_name);
 CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_imported_at ON public.parquet_import_tracking(imported_at);
 
 CREATE TABLE IF NOT EXISTS public.casts

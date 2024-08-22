@@ -16,6 +16,7 @@ JSON_COLUMNS = [
 
 
 def init_db(uri, pool_size):
+    """Initialize the database with our simple schema."""
     engine = create_engine(uri, pool_size=pool_size, max_overflow=2)
 
     LOGGER.info("migrating...")
@@ -32,13 +33,30 @@ def init_db(uri, pool_size):
     return engine
 
 
-def check_import_status(engine, file_key, check_last=False):
-    with engine.connect() as connection:
-        query = "SELECT * FROM parquet_import_tracking WHERE file_key = :file_key ORDER BY imported_at DESC"
-        result = connection.execute(text(query), {"file_key": f"{file_key}"}).fetchone()
-        if check_last:
-            return result["imported_at"] if result else None
-        return result is not None
+def check_for_existing_full_import(engine, table_name):
+    """Returns the range of row groups left to import for a given file."""
+
+    parquet_import_tracking = Table(
+        "parquet_import_tracking", MetaData(), autoload_with=engine
+    )
+
+    stmt = (
+        select(
+            parquet_import_tracking.c.file_name,
+        )
+        .where(parquet_import_tracking.c.file_type == "full")
+        .where(parquet_import_tracking.c.table_name == table_name)
+        .order_by(parquet_import_tracking.c.imported_at.asc())
+        .limit(1)
+    )
+
+    with engine.connect() as conn:
+        result = conn.execute(stmt).fetchone()
+
+    if result is None:
+        return None
+
+    return result[0]
 
 
 def clean_parquet_data(col_name, value):
@@ -57,14 +75,20 @@ def import_parquet(
 
     tracking_table = Table("parquet_import_tracking", metadata, autoload_with=engine)
 
+    is_empty = local_filename.endswith(".empty")
+
+    if is_empty:
+        num_row_groups = 0
+    else:
+        parquet_file = pq.ParquetFile(local_filename)
+        num_row_groups = parquet_file.num_row_groups
+
     with engine.connect() as conn:
         # check the database to see if we've already imported this file
         query = select(
             tracking_table.c.id, tracking_table.c.last_row_group_imported
         ).where(tracking_table.c.file_name == local_filename)
         result = conn.execute(query).fetchone()
-
-        is_empty = local_filename.endswith(".empty")
 
         if result is None:
             LOGGER.debug("inserting %s into the tracking table", local_filename)
@@ -73,10 +97,12 @@ def import_parquet(
             last_row_group_imported = None
 
             insert = tracking_table.insert().values(
+                table_name=table_name,
                 file_name=local_filename,
                 file_type=file_type,
                 is_empty=is_empty,
                 last_row_group_imported=last_row_group_imported,
+                total_row_groups=num_row_groups,
             )
 
             result = conn.execute(insert)
@@ -89,10 +115,6 @@ def import_parquet(
             LOGGER.info("Skipping import of empty file %s", local_filename)
             return
 
-        parquet_file = pq.ParquetFile(local_filename)
-
-        num_row_groups = parquet_file.num_row_groups
-
         if last_row_group_imported is None:
             start_row_group = 0
         else:
@@ -101,11 +123,11 @@ def import_parquet(
         new_steps = num_row_groups - start_row_group
 
         if new_steps == 0:
-            LOGGER.debug("%s has already been imported", local_filename)
+            LOGGER.info("%s has already been imported", local_filename)
             return
 
         if last_row_group_imported is not None:
-            LOGGER.debug("%s has resumed importing", local_filename)
+            LOGGER.info("%s has resumed importing", local_filename)
 
         # LOGGER.debug(
         #     "%s more steps from %s",
