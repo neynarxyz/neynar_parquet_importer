@@ -11,12 +11,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
     Progress,
-    SpinnerColumn,
-    BarColumn,
-    TextColumn,
     MofNCompleteColumn,
-    FileSizeColumn,
-    TotalFileSizeColumn,
     DownloadColumn,
     TransferSpeedColumn,
 )
@@ -32,20 +27,20 @@ LOGGER = logging.getLogger("app")
 INCREMENTAL_SECONDS = 5 * 60
 
 # TODO: env var to choose the tables that we care about
-# TODO: messages and reactions are not part of parquet exports
+# NOTE: "messages" is very large and so is not part of parquet exports
 TABLES = [
-    "casts",
-    "fids",
-    "fnames",
-    "links",
-    "reactions",
-    "signers",
-    "storage",
-    "user_data",
-    "verifications",
-    "warpcast_power_users",
-    # # TODO: this is a view, so we might not need to import it depending on the target db
-    # "profile_with_addresses",
+    # "casts",
+    # "fids",
+    # "fnames",
+    # "links",
+    # "reactions",
+    # "signers",
+    # "storage",
+    # "user_data",
+    # "verifications",
+    # "warpcast_power_users",
+    # # TODO: this can be a view, if they have the relevant tables
+    "profile_with_addresses",
 ]
 
 

@@ -5,10 +5,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from example_neynar_parquet_importer.app import LOGGER, PROGRESS_CHUNKS_LOCK
 
+# TODO: detect this from the table
+# arrays and json columns are stored as json in parquet because that was easier than dealing with the schema
 JSON_COLUMNS = [
     "embeds",
     "mentions",
     "mentions_positions",
+    "verified_addresses",
 ]
 
 
@@ -44,19 +47,6 @@ def clean_parquet_data(col, value):
     return value
 
 
-def humanize_time(seconds):
-    """Concise time for logs."""
-    if seconds < 60:
-        return f"{int(seconds)}s"
-    elif seconds < 3600:
-        minutes = int(seconds // 60)
-        return f"{minutes}m"
-    else:
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        return f"{hours}h {minutes}m"
-
-
 def import_parquet(engine, table_name, local_filename, progress, progress_id):
     assert table_name in local_filename
 
@@ -84,11 +74,7 @@ def import_parquet(engine, table_name, local_filename, progress, progress_id):
 
         progress.update(progress_id, total=new_total)
 
-        # Force a refresh to update the timer and other statistics
-        # TODO: this makes the time flicker too much
-        # progress.refresh()
-
-    # start_time = time.time()
+    primary_key_columns = table.primary_key.columns.values()
 
     # Read the data in chunks
     # TODO: pretty progress bar here
@@ -103,40 +89,32 @@ def import_parquet(engine, table_name, local_filename, progress, progress_id):
 
         # TODO: add the tracking table id to the data
 
-        rows = [
-            {col: clean_parquet_data(col, data[col][i]) for col in data}
+        # collect into a different dict so that we can remove dupes
+        rows = {
+            tuple(
+                clean_parquet_data(col.name, data[col.name][i])
+                for col in primary_key_columns
+            ): {col: clean_parquet_data(col, data[col][i]) for col in data}
             for i in range(len(batch))
-        ]
+        }
+
+        # discard the keys
+        rows = list(rows.values())
+
+        if len(batch) > len(rows):
+            LOGGER.debug(
+                "Dropping %s rows with duplicate primary keys", len(batch) - len(rows)
+            )
 
         stmt = pg_insert(table).values(rows)
 
         upsert_stmt = stmt.on_conflict_do_update(
-            index_elements=table.primary_key.columns.values(),
+            index_elements=primary_key_columns,
             set_={col: stmt.excluded[col] for col in data.keys()},
         )
 
         conn.execute(upsert_stmt)
 
         conn.commit()
-
-        # elapsed_time = time.time() - start_time
-        # average_time_per_group = elapsed_time / (i + 1)
-        # remaining_groups = num_row_groups - (i + 1)
-        # estimated_total_time = average_time_per_group * num_row_groups
-        # estimated_time_remaining = average_time_per_group * remaining_groups
-
-        # elapsed_time_human = humanize_time(elapsed_time)
-        # estimated_total_time_human = humanize_time(estimated_total_time)
-        # estimated_time_remaining_human = humanize_time(estimated_time_remaining)
-
-        # LOGGER.info(
-        #     "Upsert #%s/%s for %s. Elapsed: %s, Total: ~%s, Remaining: ~%s",
-        #     f"{i+1:_}",
-        #     f"{num_row_groups:_}",
-        #     table_name,
-        #     elapsed_time_human,
-        #     estimated_total_time_human,
-        #     estimated_time_remaining_human,
-        # )
 
         progress.update(progress_id, advance=1)

@@ -9,9 +9,6 @@ CREATE TABLE IF NOT EXISTS public.parquet_import_tracking (
 
 -- TODO: index on parquet_import_tracking.imported_at
 
--- TODO: all the below tables schemas were initially copied from replicator_v1
--- TODO: but parquet doesn't export the messages table. this complicates things. we can't use the upstream schema...
-
 CREATE TABLE IF NOT EXISTS public.casts
 (
     id bigint PRIMARY KEY,
@@ -20,11 +17,11 @@ CREATE TABLE IF NOT EXISTS public.casts
     deleted_at timestamp without time zone,
     "timestamp" timestamp without time zone NOT NULL,
     fid bigint NOT NULL,
-    hash bytea NOT NULL,
+    "hash" bytea NOT NULL,
     parent_hash bytea,
     parent_fid bigint,
     parent_url text COLLATE pg_catalog."default",
-    text text COLLATE pg_catalog."default" NOT NULL,
+    "text" text COLLATE pg_catalog."default" NOT NULL,
     embeds jsonb NOT NULL DEFAULT '{}'::jsonb,
     mentions bigint[] NOT NULL DEFAULT '{}'::bigint[],
     mentions_positions smallint[] NOT NULL DEFAULT '{}'::smallint[],
@@ -60,12 +57,12 @@ CREATE TABLE IF NOT EXISTS public.links
     id bigint PRIMARY KEY,
     fid bigint,
     target_fid bigint,
-    hash bytea NOT NULL,
+    "hash" bytea NOT NULL,
     "timestamp" timestamp without time zone NOT NULL,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone,
-    type text COLLATE pg_catalog."default",
+    "type" text COLLATE pg_catalog."default",
     display_timestamp timestamp without time zone,
     CONSTRAINT links_fid_target_fid_type_unique UNIQUE (fid, target_fid, type),
     CONSTRAINT links_hash_unique UNIQUE (hash)
@@ -81,7 +78,7 @@ CREATE TABLE IF NOT EXISTS public.reactions
     "timestamp" timestamp without time zone NOT NULL,
     reaction_type smallint NOT NULL,
     fid bigint NOT NULL,
-    hash bytea NOT NULL,
+    "hash" bytea NOT NULL,
     target_hash bytea,
     target_fid bigint,
     target_url text COLLATE pg_catalog."default",
@@ -96,10 +93,10 @@ CREATE TABLE IF NOT EXISTS public.signers
     deleted_at timestamp without time zone,
     "timestamp" timestamp without time zone NOT NULL,
     fid bigint NOT NULL,
-    hash bytea,
+    "hash" bytea,
     custody_address bytea,
     signer bytea NOT NULL,
-    name text COLLATE pg_catalog."default",
+    "name" text COLLATE pg_catalog."default",
     app_fid bigint,
     CONSTRAINT unique_timestamp_fid_signer UNIQUE ("timestamp", fid, signer)
 );
@@ -125,11 +122,10 @@ CREATE TABLE IF NOT EXISTS public.user_data
     deleted_at timestamp without time zone,
     "timestamp" timestamp without time zone NOT NULL,
     fid bigint NOT NULL,
-    hash bytea NOT NULL,
-    type smallint NOT NULL,
-    value text COLLATE pg_catalog."default" NOT NULL,
-    CONSTRAINT user_data_fid_type_unique UNIQUE (fid, type),
-    CONSTRAINT user_data_hash_unique UNIQUE (hash)
+    "hash" bytea NOT NULL UNIQUE,
+    "type" smallint NOT NULL,
+    "value" text COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT user_data_fid_type_unique UNIQUE (fid, type)
 );
 
 CREATE TABLE IF NOT EXISTS public.verifications
@@ -140,16 +136,27 @@ CREATE TABLE IF NOT EXISTS public.verifications
     deleted_at timestamp without time zone,
     "timestamp" timestamp without time zone NOT NULL,
     fid bigint NOT NULL,
-    hash bytea NOT NULL,
-    claim jsonb NOT NULL,
-    CONSTRAINT verifications_hash_unique UNIQUE (hash)
+    "hash" bytea NOT NULL UNIQUE,
+    claim jsonb NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.warpcast_power_users
 (
-    fid bigint NOT NULL,
+    fid bigint NOT NULL PRIMARY KEY,
     created_at timestamp without time zone NOT NULL,
     updated_at timestamp without time zone NOT NULL,
-    deleted_at timestamp without time zone,
-    CONSTRAINT warpcast_power_users_pkey PRIMARY KEY (fid)
+    deleted_at timestamp without time zone
 );
+
+CREATE TABLE IF NOT EXISTS public.profile_with_addresses
+(
+    fid bigint NOT NULL PRIMARY KEY,
+    fname text COLLATE pg_catalog."default",
+    display_name text COLLATE pg_catalog."default",
+    avatar_url text COLLATE pg_catalog."default",
+    bio text COLLATE pg_catalog."default",
+    verified_addresses JSONB NOT NULL,
+    updated_at timestamp without time zone NOT NULL
+);
+
+-- TODO: add indexes to the tables as needed
