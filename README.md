@@ -22,6 +22,26 @@ Run a postgres and the app inside of docker:
 
 NOTE: Older systems might use `docker-compose` instead of `docker compose`
 
+## Developing
+
+Set up the python environment
+
+    python3.12 -m .venv venv
+    . .venv/bin/activate
+    pip install -U pip
+    pip install --use-pep517 -r requirements.txt -e . 
+
+Set up your configuration. Copy this file and then add your secrets to it. The database host/port will probably need to go to "localhost:15432" instead of "postgres:5432":
+
+    cp env.example .env
+
+Run the app:
+
+    INTERACTIVE_DEBUG=true python -m example_neynar_parquet_importer.main
+
+NOTE: INTERACTIVE_DEBUG makes python open a shell if an exception happens. This can be useful for debugging but shouldn't be used in production.
+
+
 ## Todo
 
 - Download the latest full instead of hard coding the timestamp
