@@ -31,6 +31,8 @@ NOTE: Older systems might use `docker-compose` instead of `docker compose`
 - Crontab entry to delete old files
 - Estimated time for full imports based on the number of batches (i'm pretty sure `rich` library can do this easily)
 - "Downloaded:" log message should include file age
+- allow custom postgres schema instead of always putting into public
+- Why does the rich timer bounce around so much? It's dissappointing
 
 ## Open Questions
 

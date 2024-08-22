@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS public.parquet_import_tracking (
     id bigint PRIMARY KEY,
     file_key VARCHAR UNIQUE,
-    file_hash VARCHAR,
+    file_etag VARCHAR,
     is_full BOOLEAN DEFAULT FALSE,
     is_empty BOOLEAN DEFAULT FALSE,
     imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
