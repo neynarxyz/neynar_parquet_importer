@@ -226,7 +226,7 @@ if __name__ == "__main__":
     logging.getLogger("botocore").setLevel(logging.INFO)
     logging.getLogger("urllib3").setLevel(logging.INFO)
 
-    if os.getenv("DEBUG") == "true":
+    if os.getenv("INTERACTIVE_DEBUG") == "true":
         with launch_ipdb_on_exception():
             main()
     else:

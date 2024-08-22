@@ -16,7 +16,7 @@ class ProgressCallback:
             with lock:
                 new_total = progress.tasks[task_id].total + more_steps
 
-                LOGGER.info("Growing task %s total to %s", task_id, new_total)
+                LOGGER.debug("Growing task %s total to %s", task_id, new_total)
 
                 progress.update(task_id, total=new_total)
 

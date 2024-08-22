@@ -76,6 +76,8 @@ def import_parquet(engine, table_name, local_filename, progress, progress_id):
 
     primary_key_columns = table.primary_key.columns.values()
 
+    # TODO: add the tracking table id to the data
+
     # Read the data in chunks
     # TODO: pretty progress bar here
     for i in range(num_row_groups):
@@ -87,7 +89,6 @@ def import_parquet(engine, table_name, local_filename, progress, progress_id):
 
         data = batch.to_pydict()
 
-        # TODO: add the tracking table id to the data
 
         # collect into a different dict so that we can remove dupes
         rows = {
