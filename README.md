@@ -22,17 +22,14 @@ NOTE: Older systems might use `docker-compose` instead of `docker compose`
 
 ## Todo
 
-- Import everything in parallel
 - Download the latest full instead of hard coding the timestamp
 - Track files that have already been imported
 - If the schema ever changes, it will likely be necessary to load a "full" backup again. There will be an env var to force this
 - Track SNS queue instead of polling
-- Graceful shutdown
+- Graceful shutdown (sometimes i have to hit ctrl+c a bunch of times)
 - Crontab entry to delete old files
-- Estimated time for full imports based on the number of batches (i'm pretty sure `rich` library can do this easily)
 - "Downloaded:" log message should include file age
 - allow custom postgres schema instead of always putting into public
-- Why does the rich timer bounce around so much? It's dissappointing
 
 ## Open Questions
 
