@@ -23,6 +23,15 @@ NOTE: Older systems might use `docker-compose` instead of `docker compose`
 ## Todo
 
 - Import everything in parallel
+- Download the latest full instead of hard coding the timestamp
 - Track files that have already been imported
 - If the schema ever changes, it will likely be necessary to load a "full" backup again. There will be an env var to force this
 - Track SNS queue instead of polling
+- Graceful shutdown
+- Crontab entry to delete old files
+- Estimated time for full imports based on the number of batches (i'm pretty sure `rich` library can do this easily)
+- "Downloaded:" log message should include file age
+
+## Open Questions
+
+- profile_with_addresses as a table or a view?

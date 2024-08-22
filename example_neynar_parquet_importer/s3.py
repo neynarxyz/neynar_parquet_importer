@@ -24,7 +24,7 @@ if not os.path.exists(LOCAL_INCREMENTAL_DIR):
 
 
 def download_latest_full(table_name):
-    logging.info("Downloading the latest full backup...")
+    logging.info("Downloading the latest full backup for %s...", table_name)
 
     # TODO: look up the actual latest file
     full_name = f"farcaster-{table_name}-0-1724173200.parquet"
