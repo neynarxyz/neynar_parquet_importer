@@ -41,8 +41,8 @@ def check_import_status(engine, file_key, check_last=False):
         return result is not None
 
 
-def clean_parquet_data(col, value):
-    if col in JSON_COLUMNS:
+def clean_parquet_data(col_name, value):
+    if col_name in JSON_COLUMNS:
         return json.loads(value)
     return value
 
@@ -92,9 +92,12 @@ def import_parquet(engine, table_name, local_filename, progress, progress_id):
         # collect into a different dict so that we can remove dupes
         rows = {
             tuple(
-                clean_parquet_data(col.name, data[col.name][i])
-                for col in primary_key_columns
-            ): {col: clean_parquet_data(col, data[col][i]) for col in data}
+                clean_parquet_data(pk_col.name, data[pk_col.name][i])
+                for pk_col in primary_key_columns
+            ): {
+                col_name: clean_parquet_data(col_name, data[col_name][i])
+                for col_name in data
+            }
             for i in range(len(batch))
         }
 
