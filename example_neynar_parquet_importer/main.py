@@ -34,15 +34,15 @@ INCREMENTAL_SECONDS = 5 * 60
 # TODO: env var to choose the tables that we care about
 # TODO: messages and reactions are not part of parquet exports
 TABLES = [
-    # "casts",
-    # "fids",
-    # "fnames",
-    # "links",
+    "casts",
+    "fids",
+    "fnames",
+    "links",
     "reactions",
-    # "signers",
-    # "storage",
-    # "user_data",
-    # "verifications",
+    "signers",
+    "storage",
+    "user_data",
+    "verifications",
     "warpcast_power_users",
     # # TODO: this is a view, so we might not need to import it depending on the target db
     # "profile_with_addresses",
@@ -53,8 +53,9 @@ def sync_parquet_to_db(
     db_engine,
     table_name,
     bytes_progress,
-    bytes_downloaded_id,
-    chunks_progress,
+    full_bytes_downloaded_id,
+    incremental_bytes_downloaded_id,
+    steps_progress,
     full_steps_id,
     incremental_steps_id,
 ):
@@ -69,11 +70,11 @@ def sync_parquet_to_db(
     # if no full export, download the latest one
     if full_filename is None:
         full_filename = download_latest_full(
-            table_name, bytes_progress, bytes_downloaded_id
+            table_name, bytes_progress, full_bytes_downloaded_id
         )
 
         import_parquet(
-            db_engine, table_name, full_filename, chunks_progress, full_steps_id
+            db_engine, table_name, full_filename, steps_progress, full_steps_id
         )
 
         match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", full_filename)
@@ -106,7 +107,7 @@ def sync_parquet_to_db(
             next_start_timestamp,
             INCREMENTAL_SECONDS,
             bytes_progress,
-            bytes_downloaded_id,
+            incremental_bytes_downloaded_id,
         )
 
         if incremental_filename is None:
@@ -125,7 +126,7 @@ def sync_parquet_to_db(
             db_engine,
             table_name,
             incremental_filename,
-            chunks_progress,
+            steps_progress,
             incremental_steps_id,
         )
 
@@ -144,23 +145,23 @@ def main():
             TransferSpeedColumn(),
             refresh_per_second=10,
         )
-        chunks_progress = Progress(
+        steps_progress = Progress(
             *Progress.get_default_columns(),
             MofNCompleteColumn(),
-            refresh_per_second=0.1,
+            refresh_per_second=10,
         )
 
         progress_table = Table.grid()
         progress_table.add_row(
             Panel.fit(
                 bytes_progress,
-                title="",
+                title="Bytes Downloaded",
                 border_style="green",
                 padding=(0, 0),
             ),
             Panel.fit(
-                chunks_progress,
-                title="",
+                steps_progress,
+                title="Steps Imported",
                 border_style="blue",
                 padding=(0, 0),
             ),
@@ -172,9 +173,12 @@ def main():
             ThreadPoolExecutor(max_workers=len(TABLES))
         )
 
-        bytes_downloaded_id = bytes_progress.add_task("Bytes Downloaded", total=0)
-        full_steps_id = chunks_progress.add_task("Full Steps", total=0)
-        incremental_steps_id = chunks_progress.add_task("Incremental Steps", total=0)
+        full_bytes_downloaded_id = bytes_progress.add_task("Full", total=0)
+        incremental_bytes_downloaded_id = bytes_progress.add_task(
+            "Incremental", total=0
+        )
+        full_steps_id = steps_progress.add_task("Full", total=0)
+        incremental_steps_id = steps_progress.add_task("Incremental", total=0)
 
         table_fs = {
             table_executor.submit(
@@ -182,8 +186,9 @@ def main():
                 db_engine,
                 table_name,
                 bytes_progress,
-                bytes_downloaded_id,
-                chunks_progress,
+                full_bytes_downloaded_id,
+                incremental_bytes_downloaded_id,
+                steps_progress,
                 full_steps_id,
                 incremental_steps_id,
             ): table_name

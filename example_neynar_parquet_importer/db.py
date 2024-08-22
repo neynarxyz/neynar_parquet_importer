@@ -94,7 +94,7 @@ def import_parquet(engine, table_name, local_filename, progress, progress_id):
     # TODO: pretty progress bar here
     for i in range(num_row_groups):
         LOGGER.info(
-            "Upserting #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
+            "Upsert #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
         )
 
         batch = parquet_file.read_row_group(i)
