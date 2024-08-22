@@ -28,8 +28,12 @@ jmespath==1.0.1
     # via
     #   boto3
     #   botocore
+markdown-it-py==3.0.0
+    # via rich
 matplotlib-inline==0.1.7
     # via ipython
+mdurl==0.1.2
+    # via markdown-it-py
 numpy==2.1.0
     # via pyarrow
 parso==0.8.4
@@ -47,10 +51,14 @@ pure-eval==0.2.3
 pyarrow==17.0.0
     # via example_neynar_parquet_importer (setup.py)
 pygments==2.18.0
-    # via ipython
+    # via
+    #   ipython
+    #   rich
 python-dateutil==2.9.0.post0
     # via botocore
 python-dotenv==1.0.1
+    # via example_neynar_parquet_importer (setup.py)
+rich==13.7.1
     # via example_neynar_parquet_importer (setup.py)
 s3transfer==0.10.2
     # via boto3

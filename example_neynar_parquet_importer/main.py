@@ -6,6 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from ipdb import launch_ipdb_on_exception
+from rich.logging import RichHandler
 
 from example_neynar_parquet_importer.db import import_parquet, init_db
 from example_neynar_parquet_importer.s3 import (
@@ -77,7 +78,9 @@ def sync_parquet_to_db(db_engine, table_name):
         )
 
         if incremental_filename is None:
-            logging.debug("Next incremental for %s should be ready soon. Sleeping...", table_name)
+            logging.debug(
+                "Next incremental for %s should be ready soon. Sleeping...", table_name
+            )
             time.sleep(60)
             continue
 
@@ -112,7 +115,7 @@ def main():
         for future in as_completed(table_fs):
             table_name = table_fs[future]
 
-            logging.info("Table %s finished", table_name)
+            logging.warn("Table %s finished. This is unexpected", table_name)
 
             # this will raise an excecption if `sync_parquet_to_db` failed
             # the result should always be ready. no timeout is needed
@@ -127,9 +130,7 @@ if __name__ == "__main__":
     # TODO: check env var to enable json logging
     # TODO: INFO level for s3transfer
     logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(levelname)s %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.INFO, format="%(message)s", datefmt="%X", handlers=[RichHandler()]
     )
 
     logging.getLogger("s3transfer").setLevel(logging.INFO)

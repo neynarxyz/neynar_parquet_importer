@@ -24,8 +24,6 @@ if not os.path.exists(LOCAL_INCREMENTAL_DIR):
 
 
 def download_latest_full(table_name):
-    logging.info("Downloading the latest full backup for %s...", table_name)
-
     # TODO: look up the actual latest file
     full_name = f"farcaster-{table_name}-0-1724173200.parquet"
 
@@ -35,7 +33,7 @@ def download_latest_full(table_name):
         logging.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
-    logging.info("Downloading to %s...", local_file_path)
+    logging.info("Downloading the latest full backup to %s...", local_file_path)
     S3_CLIENT.download_file(
         BUCKET_NAME, FULL_PARQUET_S3_URI + "/" + full_name, local_file_path
     )

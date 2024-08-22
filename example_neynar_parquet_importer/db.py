@@ -1,7 +1,7 @@
 import json
-import os
 import logging
 import pyarrow.parquet as pq
+import time
 from sqlalchemy import MetaData, Table, create_engine, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -61,11 +61,14 @@ def import_parquet(engine, table_name, local_filename):
     # Get the number of row groups in the file
     num_row_groups = parquet_file.num_row_groups
 
+    start_time = time.time()
+
     # Read the data in chunks
+    # TODO: pretty progress bar here
     for i in range(num_row_groups):
-        logging.info(
-            "upsert #%s/%s for %s...", f"{i+1:_}", f"{num_row_groups:_}", table_name
-        )
+        # logging.info(
+        #     "Upserting #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
+        # )
 
         batch = parquet_file.read_row_group(i)
 
@@ -88,3 +91,20 @@ def import_parquet(engine, table_name, local_filename):
         conn.execute(upsert_stmt)
 
         conn.commit()
+
+        elapsed_time = time.time() - start_time
+        average_time_per_group = elapsed_time / (i + 1)
+        remaining_groups = num_row_groups - (i + 1)
+        estimated_total_time = average_time_per_group * num_row_groups
+        estimated_time_remaining = average_time_per_group * remaining_groups
+
+        # TODO: humanize the seconds
+        logging.info(
+            "Upsert #%s/%s for %s. Elapsed: %.2fs, Total: ~%.2fs, Remaining: ~%.2fs",
+            f"{i+1:_}",
+            f"{num_row_groups:_}",
+            table_name,
+            elapsed_time,
+            estimated_total_time,
+            estimated_time_remaining,
+        )
