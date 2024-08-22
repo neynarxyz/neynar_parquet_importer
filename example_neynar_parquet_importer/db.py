@@ -12,9 +12,9 @@ JSON_COLUMNS = [
 ]
 
 
-def init_db(uri):
+def init_db(uri, pool_size):
     # TODO: how do we set a custom schema?
-    engine = create_engine(uri)
+    engine = create_engine(uri, pool_size=pool_size, max_overflow=0)
 
     logging.info("migrating...")
     with engine.connect() as connection:

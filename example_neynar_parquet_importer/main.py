@@ -94,7 +94,7 @@ def sync_parquet_to_db(db_engine, table_name):
 
 def main():
     # connect to and set up the database
-    db_engine = init_db(os.getenv("DATABASE_URI"))
+    db_engine = init_db(os.getenv("DATABASE_URI"), len(TABLES))
 
     with ExitStack() as stack:
         table_executor = stack.enter_context(
