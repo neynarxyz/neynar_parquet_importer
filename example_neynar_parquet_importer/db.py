@@ -150,6 +150,7 @@ def import_parquet(
                 "Upsert #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
             )
 
+            # TODO: larger batches with `pf.iter_batches(batch_size=X)` instead of row groups
             batch = parquet_file.read_row_group(i)
 
             data = batch.to_pydict()

@@ -77,6 +77,8 @@ def download_incremental(
     local_parquet_path = os.path.join(LOCAL_INCREMENTAL_DIR, parquet_name)
     local_empty_path = os.path.join(LOCAL_INCREMENTAL_DIR, empty_name)
 
+    # TODO: check if the file is already in the database. if its been fully imported, return now
+
     if os.path.exists(local_parquet_path):
         LOGGER.debug(
             "%s already exists locally. Skipping download.", local_parquet_path

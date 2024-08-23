@@ -30,20 +30,19 @@ from example_neynar_parquet_importer.s3 import (
 LOGGER = logging.getLogger("app")
 INCREMENTAL_SECONDS = 5 * 60
 
-# TODO: env var to choose the tables that we care about
 # NOTE: "messages" is very large and so is not part of parquet exports
-TABLES = [
-    # "casts",
-    # "fids",
-    # "fnames",
-    # "links",
-    # "reactions",
-    # "signers",
-    # "storage",
-    # "user_data",
-    # "verifications",
-    # "warpcast_power_users",
+ALL_TABLES = [
+    "casts",
+    "fids",
+    "fnames",
+    "links",
     "profile_with_addresses",
+    "reactions",
+    "signers",
+    "storage",
+    "user_data",
+    "verifications",
+    "warpcast_power_users",
 ]
 
 
@@ -75,6 +74,8 @@ def sync_parquet_to_db(
         db_engine, table_name, full_filename, "full", steps_progress, full_steps_id
     )
 
+    # TODO: check the database to see if we've already imported incrementals
+    # TODO: when writing more advanced logic for skipping handled files, be sure not to miss any! upgrades or outages might cause a file to be missing for a couple hours
     match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", full_filename)
     if match:
         # db_name = match.group(1)
@@ -125,13 +126,20 @@ def sync_parquet_to_db(
 
 
 def main():
+    tables = os.getenv("TABLES")
+
+    if not tables:
+        tables = ALL_TABLES
+
+    LOGGER.info("Tables: %s", ",".join(tables))
+
     # connect to and set up the database
-    pool_size = len(TABLES) * 2
+    pool_size = len(tables) * 2
 
     db_engine = init_db(os.getenv("DATABASE_URI"), pool_size)
 
     with ExitStack() as stack:
-        # TODO: make these progress bars look different
+        # these pretty progress bars show when you run the application in an interactive terminal
         bytes_progress = Progress(
             *Progress.get_default_columns(),
             DownloadColumn(),
@@ -165,7 +173,7 @@ def main():
         live = stack.enter_context(Live(progress_table, refresh_per_second=10))
 
         table_executor = stack.enter_context(
-            ThreadPoolExecutor(max_workers=len(TABLES))
+            ThreadPoolExecutor(max_workers=len(tables))
         )
 
         full_bytes_downloaded_id = bytes_progress.add_task("Full", total=0)
@@ -187,10 +195,10 @@ def main():
                 full_steps_id,
                 incremental_steps_id,
             ): table_name
-            for table_name in TABLES
+            for table_name in tables
         }
 
-        # wait for functions to finish
+        # wait for importers to finish
         # they will run forever, so this really only needs to handle exceptions
         for future in as_completed(table_fs):
             table_name = table_fs[future]

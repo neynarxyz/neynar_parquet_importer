@@ -6,9 +6,9 @@
 #
 asttokens==2.4.1
     # via stack-data
-boto3==1.35.3
+boto3==1.35.5
     # via example_neynar_parquet_importer (setup.py)
-botocore==1.35.3
+botocore==1.35.5
     # via
     #   boto3
     #   s3transfer
