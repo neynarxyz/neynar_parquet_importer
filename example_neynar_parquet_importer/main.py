@@ -128,7 +128,9 @@ def sync_parquet_to_db(
 def main():
     tables = os.getenv("TABLES")
 
-    if not tables:
+    if tables:
+        tables = tables.split(",")
+    else:
         tables = ALL_TABLES
 
     LOGGER.info("Tables: %s", ",".join(tables))

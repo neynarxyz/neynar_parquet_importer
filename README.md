@@ -56,6 +56,7 @@ Lint your code:
 Upgrade dependencies:
 
     pip-compile -U setup.py
+    pip install --use-pep517 -r requirements.txt -e .
 
 
 ## Notes and Todo
