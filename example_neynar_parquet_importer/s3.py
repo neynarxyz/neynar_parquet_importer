@@ -14,7 +14,7 @@ from example_neynar_parquet_importer.app import (
 LOCAL_FULL_DIR = "./data/parquet/full"
 LOCAL_INCREMENTAL_DIR = "./data/parquet/incremental"
 
-S3_CLIENT = boto3.client("s3", config=Config(max_pool_connections=20))
+S3_CLIENT = boto3.client("s3", config=Config(max_pool_connections=50))
 BUCKET_NAME = "tf-premium-parquet"
 
 PARQUET_S3_PREFIX = f"public-postgres/farcaster/v2"
