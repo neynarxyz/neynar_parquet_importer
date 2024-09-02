@@ -16,7 +16,7 @@ decorator==5.1.1
     # via
     #   ipdb
     #   ipython
-executing==2.0.1
+executing==2.1.0
     # via stack-data
 ipdb==0.13.13
     # via example_neynar_parquet_importer (setup.py)
