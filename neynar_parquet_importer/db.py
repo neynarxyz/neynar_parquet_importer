@@ -3,7 +3,7 @@ import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from example_neynar_parquet_importer.app import LOGGER, PROGRESS_CHUNKS_LOCK
+from neynar_parquet_importer.app import LOGGER
 
 # TODO: detect this from the table
 # arrays and json columns are stored as json in parquet because that was easier than dealing with the schema
@@ -65,9 +65,7 @@ def clean_parquet_data(col_name, value):
     return value
 
 
-def import_parquet(
-    engine, table_name, local_filename, file_type, progress, progress_id
-):
+def import_parquet(engine, table_name, local_filename, file_type, progress_callback):
     assert table_name in local_filename
 
     metadata = MetaData()
@@ -136,11 +134,7 @@ def import_parquet(
         # )
 
         # update the progress counter with our new step total
-        # TODO: move this onto an object the contains progress and progress_id and the relevant lock
-        with PROGRESS_CHUNKS_LOCK:
-            new_total = progress.tasks[progress_id].total + new_steps
-
-            progress.update(progress_id, total=new_total)
+        progress_callback.more_steps(new_steps)
 
         primary_key_columns = table.primary_key.columns.values()
 
@@ -196,4 +190,4 @@ def import_parquet(
             # save the rows and the tracking update together
             conn.commit()
 
-            progress.update(progress_id, advance=1)
+            progress_callback(1)

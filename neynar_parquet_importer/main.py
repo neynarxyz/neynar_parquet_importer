@@ -17,12 +17,13 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from example_neynar_parquet_importer.db import (
+from .app import PROGRESS_BYTES_LOCK, PROGRESS_CHUNKS_LOCK, ProgressCallback
+from .db import (
     check_for_existing_full_import,
     import_parquet,
     init_db,
 )
-from example_neynar_parquet_importer.s3 import (
+from .s3 import (
     download_incremental,
     download_latest_full,
 )
@@ -172,11 +173,7 @@ def main():
 
         # this only shows in a terminal. it does not show in docker logs
         # TODO: send a periodic log message to show progress in docker logs
-        live = stack.enter_context(Live(progress_table, refresh_per_second=10))
-
-        table_executor = stack.enter_context(
-            ThreadPoolExecutor(max_workers=len(tables))
-        )
+        stack.enter_context(Live(progress_table, refresh_per_second=10))
 
         full_bytes_downloaded_id = bytes_progress.add_task("Full", total=0)
         incremental_bytes_downloaded_id = bytes_progress.add_task(
@@ -185,17 +182,34 @@ def main():
         full_steps_id = steps_progress.add_task("Full", total=0)
         incremental_steps_id = steps_progress.add_task("Incremental", total=0)
 
+        full_bytes_callback = ProgressCallback(
+            bytes_progress, full_bytes_downloaded_id, 0, PROGRESS_BYTES_LOCK
+        )
+        incremental_bytes_callback = ProgressCallback(
+            bytes_progress, incremental_bytes_downloaded_id, 0, PROGRESS_BYTES_LOCK
+        )
+
+        full_steps_callback = ProgressCallback(
+            steps_progress, full_steps_id, 0, PROGRESS_CHUNKS_LOCK
+        )
+        incremental_steps_callback = ProgressCallback(
+            steps_progress, incremental_steps_id, 0, PROGRESS_CHUNKS_LOCK
+        )
+
+        # do all the tables in parallel
+        table_executor = stack.enter_context(
+            ThreadPoolExecutor(max_workers=len(tables))
+        )
+
         table_fs = {
             table_executor.submit(
                 sync_parquet_to_db,
                 db_engine,
                 table_name,
-                bytes_progress,
-                full_bytes_downloaded_id,
-                incremental_bytes_downloaded_id,
-                steps_progress,
-                full_steps_id,
-                incremental_steps_id,
+                full_bytes_callback,
+                incremental_bytes_callback,
+                full_steps_callback,
+                incremental_steps_callback,
             ): table_name
             for table_name in tables
         }

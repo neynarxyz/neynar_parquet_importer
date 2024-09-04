@@ -1,13 +1,10 @@
 import os
 import boto3
-import logging
 import botocore.exceptions
 from botocore.config import Config
 
-from example_neynar_parquet_importer.app import (
+from neynar_parquet_importer.app import (
     LOGGER,
-    PROGRESS_BYTES_LOCK,
-    ProgressCallback,
 )
 
 # TODO: get this from env var
@@ -17,7 +14,7 @@ LOCAL_INCREMENTAL_DIR = "./data/parquet/incremental"
 S3_CLIENT = boto3.client("s3", config=Config(max_pool_connections=50))
 BUCKET_NAME = "tf-premium-parquet"
 
-PARQUET_S3_PREFIX = f"public-postgres/farcaster/v2"
+PARQUET_S3_PREFIX = "public-postgres/farcaster/v2"
 
 FULL_PARQUET_S3_URI = PARQUET_S3_PREFIX + "/full"
 INCREMENTAL_PARQUET_S3_URI = PARQUET_S3_PREFIX + "/incremental"
@@ -29,7 +26,7 @@ if not os.path.exists(LOCAL_INCREMENTAL_DIR):
     os.makedirs(LOCAL_INCREMENTAL_DIR)
 
 
-def download_latest_full(table_name, progress, progress_id):
+def download_latest_full(table_name, progress_callback):
     response = S3_CLIENT.list_objects_v2(
         Bucket=BUCKET_NAME,
         Prefix=FULL_PARQUET_S3_URI + f"/farcaster-{table_name}-0-",
@@ -49,24 +46,20 @@ def download_latest_full(table_name, progress, progress_id):
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
-    callback = ProgressCallback(
-        progress, progress_id, latest_size_bytes, PROGRESS_BYTES_LOCK
-    )
+    progress_callback.more_steps(latest_size_bytes)
 
     LOGGER.info("Downloading the latest full backup to %s...", local_file_path)
     S3_CLIENT.download_file(
         BUCKET_NAME,
         FULL_PARQUET_S3_URI + "/" + full_name,
         local_file_path,
-        Callback=callback,
+        Callback=progress_callback,
     )
 
     return local_file_path
 
 
-def download_incremental(
-    tablename, start_timestamp, duration, progress, bytes_downloaded_id
-):
+def download_incremental(tablename, start_timestamp, duration, progress_callback):
     end_timestamp = start_timestamp + duration
 
     incremental_name = f"farcaster-{tablename}-{start_timestamp}-{end_timestamp}"
@@ -96,18 +89,16 @@ def download_incremental(
             Bucket=BUCKET_NAME, Key=INCREMENTAL_PARQUET_S3_URI + "/" + parquet_name
         )["ContentLength"]
 
-        callback = ProgressCallback(
-            progress, bytes_downloaded_id, latest_size_bytes, PROGRESS_BYTES_LOCK
-        )
+        progress_callback.more_steps(latest_size_bytes)
 
         # TODO: callback on this download to update the progress bar
         S3_CLIENT.download_file(
             BUCKET_NAME,
             INCREMENTAL_PARQUET_S3_URI + "/" + parquet_name,
             local_parquet_path,
-            Callback=callback,
+            Callback=progress_callback,
         )
-        LOGGER.info(f"Downloaded: %s", local_parquet_path)
+        LOGGER.info("Downloaded: %s", local_parquet_path)
 
         return local_parquet_path
     except botocore.exceptions.ClientError as e:
@@ -123,7 +114,7 @@ def download_incremental(
             INCREMENTAL_PARQUET_S3_URI + "/" + empty_name,
             local_empty_path,
         )
-        LOGGER.debug(f"Downloaded empty: %s", local_empty_path)
+        LOGGER.debug("Downloaded empty: %s", local_empty_path)
 
         return local_empty_path
     except botocore.exceptions.ClientError as e:
