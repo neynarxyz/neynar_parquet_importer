@@ -37,7 +37,7 @@ Set up the python environment:
     python3.12 -m .venv venv
     . .venv/bin/activate
     pip install -U pip
-    pip install --use-pep517 -r requirements.txt -e . black pip-tools
+    pip install --use-pep517 -r requirements.txt -e . ruff pip-tools
 
 Edit your configuration. The database host/port will probably need to go to "localhost:15432" instead of "postgres:5432":
 
@@ -45,13 +45,13 @@ Edit your configuration. The database host/port will probably need to go to "loc
 
 Run the app:
 
-    INTERACTIVE_DEBUG=true python -m example_neynar_parquet_importer.main
+    INTERACTIVE_DEBUG=true python -m neynar_parquet_importer.main
 
 NOTE: INTERACTIVE_DEBUG makes python open a shell if an exception happens. This can be useful for debugging but shouldn't be used in production.
 
 Lint your code:
 
-    black ./example_neynar_parquet_importer
+    ruff neynar_parquet_importer
 
 Upgrade dependencies:
 

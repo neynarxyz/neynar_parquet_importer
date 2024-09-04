@@ -1,8 +1,8 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="example_neynar_parquet_importer",
-    version="0.1.0",
+    name="neynar_parquet_importer",
+    version="0.1.1",
     packages=find_packages(),
     install_requires=[
         "boto3",

@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: example_neynar_parquet_importer
+      POSTGRES_DB: neynar_parquet_importer
     restart: unless-stopped
     ports:
       - "15432:5432"
