@@ -50,12 +50,10 @@ ALL_TABLES = [
 def sync_parquet_to_db(
     db_engine,
     table_name,
-    bytes_progress,
-    full_bytes_downloaded_id,
-    incremental_bytes_downloaded_id,
-    steps_progress,
-    full_steps_id,
-    incremental_steps_id,
+    full_bytes_downloaded_progress,
+    incremental_bytes_downloaded_progress,
+    full_steps_progress,
+    incremental_steps_progress,
 ):
     """Function that runs forever (barring exceptions) to download and import parquet files for a table.
 
@@ -67,13 +65,9 @@ def sync_parquet_to_db(
 
     if full_filename is None:
         # if no full export, download the latest one
-        full_filename = download_latest_full(
-            table_name, bytes_progress, full_bytes_downloaded_id
-        )
+        full_filename = download_latest_full(table_name, full_bytes_downloaded_progress)
 
-    import_parquet(
-        db_engine, table_name, full_filename, "full", steps_progress, full_steps_id
-    )
+    import_parquet(db_engine, table_name, full_filename, "full", full_steps_progress)
 
     # TODO: check the database to see if we've already imported incrementals
     # TODO: when writing more advanced logic for skipping handled files, be sure not to miss any! upgrades or outages might cause a file to be missing for a couple hours
@@ -100,8 +94,7 @@ def sync_parquet_to_db(
             table_name,
             next_start_timestamp,
             INCREMENTAL_SECONDS,
-            bytes_progress,
-            incremental_bytes_downloaded_id,
+            incremental_bytes_downloaded_progress,
         )
 
         if incremental_filename is None:
@@ -121,8 +114,7 @@ def sync_parquet_to_db(
             table_name,
             incremental_filename,
             "incremental",
-            steps_progress,
-            incremental_steps_id,
+            incremental_steps_progress,
         )
 
 
