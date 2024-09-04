@@ -20,7 +20,7 @@ executing==2.0.1
     # via stack-data
 ipdb==0.13.13
     # via example_neynar_parquet_importer (setup.py)
-ipython==8.26.0
+ipython==8.27.0
     # via ipdb
 jedi==0.19.1
     # via ipython
