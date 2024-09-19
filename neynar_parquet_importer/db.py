@@ -33,8 +33,34 @@ def init_db(uri, pool_size):
     return engine
 
 
+def check_for_existing_incremental_import(engine, table_name):
+    """Returns the filename for the newest incremental. This may only be partially imported."""
+
+    parquet_import_tracking = Table(
+        "parquet_import_tracking", MetaData(), autoload_with=engine
+    )
+
+    stmt = (
+        select(
+            parquet_import_tracking.c.file_name,
+        )
+        .where(parquet_import_tracking.c.file_type == "incremental")
+        .where(parquet_import_tracking.c.table_name == table_name)
+        .order_by(parquet_import_tracking.c.imported_at.desc())
+        .limit(1)
+    )
+
+    with engine.connect() as conn:
+        result = conn.execute(stmt).fetchone()
+
+    if result is None:
+        return None
+
+    return result[0]
+
+
 def check_for_existing_full_import(engine, table_name):
-    """Returns the filename of the newest full import (there should really only be one)."""
+    """Returns the filename of the newest full import (there should really only be one). This may only be partially imported."""
 
     parquet_import_tracking = Table(
         "parquet_import_tracking", MetaData(), autoload_with=engine

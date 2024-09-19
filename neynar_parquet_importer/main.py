@@ -20,6 +20,7 @@ from rich.table import Table
 from .app import PROGRESS_BYTES_LOCK, PROGRESS_CHUNKS_LOCK, ProgressCallback
 from .db import (
     check_for_existing_full_import,
+    check_for_existing_incremental_import,
     import_parquet,
     init_db,
 )
@@ -59,26 +60,48 @@ def sync_parquet_to_db(
 
     TODO: run downloads and imports in parallel to improve initial sync times
     """
+    incremental_filename = check_for_existing_incremental_import(db_engine, table_name)
+    if incremental_filename:
+        # if we have imported an incremental, then we should start there instead of at the full
+        LOGGER.info("Found existing incremental import %s", incremental_filename)
 
-    # TODO V0: check database to see if we've already imported a full. also allow forcing with a flag
-    full_filename = check_for_existing_full_import(db_engine, table_name)
+        import_parquet(
+            db_engine,
+            table_name,
+            incremental_filename,
+            "incremental",
+            incremental_steps_progress,
+        )
 
-    if full_filename is None:
-        # if no full export, download the latest one
-        full_filename = download_latest_full(table_name, full_bytes_downloaded_progress)
+        last_import_filename = incremental_filename
+    else:
+        # no incrementals yet, start with the newest full file
+        full_filename = check_for_existing_full_import(db_engine, table_name)
 
-    import_parquet(db_engine, table_name, full_filename, "full", full_steps_progress)
+        if full_filename is None:
+            # if no full export, download the latest one
+            full_filename = download_latest_full(
+                table_name, full_bytes_downloaded_progress
+            )
+
+        import_parquet(
+            db_engine, table_name, full_filename, "full", full_steps_progress
+        )
+
+        last_import_filename = full_filename
 
     # TODO: check the database to see if we've already imported incrementals
     # TODO: when writing more advanced logic for skipping handled files, be sure not to miss any! upgrades or outages might cause a file to be missing for a couple hours
-    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", full_filename)
+    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", last_import_filename)
     if match:
         # db_name = match.group(1)
         # table_name = match.group(2)
         # start_timestamp = match.group(3)
         next_start_timestamp = int(match.group(4))
     else:
-        raise ValueError("Full filename does not match expected format.", full_filename)
+        raise ValueError(
+            "Last Import filename does not match expected format.", last_import_filename
+        )
 
     # TODO: subscribe to the SNS topic and read from it instead of polling
 
