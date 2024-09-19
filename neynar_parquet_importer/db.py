@@ -34,7 +34,7 @@ def init_db(uri, pool_size):
 
 
 def check_for_existing_full_import(engine, table_name):
-    """Returns the range of row groups left to import for a given file."""
+    """Returns the filename of the newest full import (there should really only be one)."""
 
     parquet_import_tracking = Table(
         "parquet_import_tracking", MetaData(), autoload_with=engine
@@ -46,7 +46,7 @@ def check_for_existing_full_import(engine, table_name):
         )
         .where(parquet_import_tracking.c.file_type == "full")
         .where(parquet_import_tracking.c.table_name == table_name)
-        .order_by(parquet_import_tracking.c.imported_at.asc())
+        .order_by(parquet_import_tracking.c.imported_at.desc())
         .limit(1)
     )
 
@@ -150,6 +150,7 @@ def import_parquet(engine, table_name, local_filename, file_type, progress_callb
             data = batch.to_pydict()
 
             # collect into a different dict so that we can remove dupes
+            # NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
             rows = {
                 tuple(
                     clean_parquet_data(pk_col.name, data[pk_col.name][i])
@@ -170,6 +171,7 @@ def import_parquet(engine, table_name, local_filename, file_type, progress_callb
                     len(batch) - len(rows),
                 )
 
+            # insert or update the rows
             stmt = pg_insert(table).values(rows)
 
             upsert_stmt = stmt.on_conflict_do_update(
