@@ -8,7 +8,7 @@ The script will load a "full" export once at the start. Once the backfill of the
 
 Sometimes the network is quiet and the parquet file is empty. When this happens, Neynar exports a `.empty` file. We had some troubles with schema detection with actually empty `.parquet` files and this was a simple solution.
 
-The database is set up by a simple `.sql` file that runs when the app starts. Theres so many ways to do migrations and I didn't want to force a library on you.
+The database is set up by a simple `.sql` file that runs when the app starts. There is so many ways to do migrations and I didn't want to force a library on you.
 
 ## Setup
 
