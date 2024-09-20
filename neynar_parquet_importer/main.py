@@ -40,6 +40,7 @@ ALL_TABLES = [
     "fids",
     "fnames",
     "links",
+    "power_users",
     "profile_with_addresses",
     "reactions",
     "signers",
