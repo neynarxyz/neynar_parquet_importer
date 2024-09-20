@@ -34,7 +34,9 @@ INCREMENTAL_SECONDS = 5 * 60
 
 # NOTE: "messages" is very large and so is not part of parquet exports
 ALL_TABLES = [
+    "blocks",
     "casts",
+    "channel_follows",
     "fids",
     "fnames",
     "links",
