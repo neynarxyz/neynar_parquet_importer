@@ -1,6 +1,6 @@
 # Example Neynar Parquet Importer
 
-Download parquet exports from Neynar and import them into a Postgres database.
+Download parquet exports from [Neynar](https://neynar.com) and import them into a Postgres database.
 
 Credentials for downloading the parquet files are currently handed out manually. Reach out to us if you'd like to try it out!
 
