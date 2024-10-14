@@ -6,7 +6,7 @@
 #
 asttokens==2.4.1
     # via stack-data
-boto3==1.35.11
+boto3==1.35.39
     # via neynar_parquet_importer (setup.py)
 botocore==1.35.11
     # via
