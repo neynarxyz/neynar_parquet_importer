@@ -1,10 +1,10 @@
 import json
-from os import path
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from neynar_parquet_importer.app import LOGGER
+from neynar_parquet_importer.settings import Settings
 
 # TODO: detect this from the table
 # arrays and json columns are stored as json in parquet because that was easier than dealing with the schema
@@ -34,9 +34,10 @@ def init_db(uri, pool_size):
     return engine
 
 
-def check_for_existing_incremental_import(engine, table_name):
+def check_for_existing_incremental_import(engine, settings: Settings, table_name):
     """Returns the filename for the newest incremental. This may only be partially imported."""
 
+    # TODO: cache this Table?
     parquet_import_tracking = Table(
         "parquet_import_tracking", MetaData(), autoload_with=engine
     )
@@ -47,6 +48,10 @@ def check_for_existing_incremental_import(engine, table_name):
         )
         .where(parquet_import_tracking.c.file_type == "incremental")
         .where(parquet_import_tracking.c.table_name == table_name)
+        .where(parquet_import_tracking.c.file_version == settings.npe_version)
+        .where(
+            parquet_import_tracking.c.file_duration_s == settings.incremental_duration
+        )
         .order_by(parquet_import_tracking.c.imported_at.desc())
         .limit(1)
     )
@@ -60,7 +65,7 @@ def check_for_existing_incremental_import(engine, table_name):
     return result[0]
 
 
-def check_for_existing_full_import(engine, table_name):
+def check_for_existing_full_import(engine, settings: Settings, table_name):
     """Returns the filename of the newest full import (there should really only be one). This may only be partially imported."""
 
     parquet_import_tracking = Table(
@@ -73,6 +78,10 @@ def check_for_existing_full_import(engine, table_name):
         )
         .where(parquet_import_tracking.c.file_type == "full")
         .where(parquet_import_tracking.c.table_name == table_name)
+        .where(parquet_import_tracking.c.file_version == settings.npe_version)
+        .where(
+            parquet_import_tracking.c.file_duration_s == settings.incremental_duration
+        )
         .order_by(parquet_import_tracking.c.imported_at.desc())
         .limit(1)
     )
@@ -92,7 +101,14 @@ def clean_parquet_data(col_name, value):
     return value
 
 
-def import_parquet(engine, table_name, local_filename, file_type, progress_callback):
+def import_parquet(
+    engine,
+    table_name,
+    local_filename,
+    file_type,
+    progress_callback,
+    settings: Settings,
+):
     assert table_name in local_filename
 
     metadata = MetaData()
@@ -125,6 +141,8 @@ def import_parquet(engine, table_name, local_filename, file_type, progress_callb
                 table_name=table_name,
                 file_name=local_filename,
                 file_type=file_type,
+                file_version=settings.npe_version,
+                file_duration_s=settings.incremental_duration,
                 is_empty=is_empty,
                 last_row_group_imported=last_row_group_imported,
                 total_row_groups=num_row_groups,

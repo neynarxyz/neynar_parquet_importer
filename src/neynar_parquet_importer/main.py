@@ -174,8 +174,13 @@ def main(settings: Settings):
 
     LOGGER.info("Tables: %s", ",".join(tables))
 
-    # connect to and set up the database
-    db_engine = init_db(os.getenv("DATABASE_URI"), settings.postgres_pool_size)
+    db_engine = init_db(settings.postgres_dsn, settings.postgres_pool_size)
+
+    if not settings.local_full_dir.exists():
+        settings.local_full_dir.mkdir(parents=True)
+
+    if not settings.local_incremental_dir.exists():
+        settings.local_incremental_dir.mkdir(parents=True)
 
     with ExitStack() as stack:
         # these pretty progress bars show when you run the application in an interactive terminal
