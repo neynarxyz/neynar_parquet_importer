@@ -26,11 +26,15 @@ Run a postgres and the app inside of docker:
 
 NOTE: Older systems might use `docker-compose` instead of `docker compose`
 
-## Developing
+## Developing on your localhost
 
 Stop the docker version of the app:
 
     docker compose stop app
+
+Install `uv`:
+
+    brew install uv
 
 Set up the python environment:
 

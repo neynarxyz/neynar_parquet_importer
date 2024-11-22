@@ -1,6 +1,6 @@
 [project]
 name = "neynar-parquet-importer"
-version = "0.1.0"
+version = "0.3.0"
 description = "Import Neynar's parquet files into a Postgres database"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -25,9 +25,9 @@ dependencies = [
     "ptyprocess==0.7.0",
     "pure-eval==0.2.3",
     "pyarrow==17.0.0",
+    "pydantic-settings>=2.6.1",
     "pygments==2.18.0",
     "python-dateutil==2.9.0.post0",
-    "python-dotenv==1.0.1",
     "rich==13.8.0",
     "s3transfer==0.10.2",
     "six==1.16.0",

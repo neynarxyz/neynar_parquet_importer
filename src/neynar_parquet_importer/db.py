@@ -1,4 +1,5 @@
 import json
+from os import path
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
