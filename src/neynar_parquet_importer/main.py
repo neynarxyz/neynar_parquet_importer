@@ -1,9 +1,9 @@
-from contextlib import ExitStack
 import logging
 import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import ExitStack
 from dotenv import load_dotenv
 from ipdb import launch_ipdb_on_exception
 from rich.logging import RichHandler
@@ -30,8 +30,11 @@ from .s3 import (
 )
 
 LOGGER = logging.getLogger("app")
+
+# TODO: read this from the env instead
 INCREMENTAL_SECONDS = 5 * 60
 
+# TODO: fetch this from env? tools to generate this list from the s3 bucket?
 # NOTE: "messages" is very large and so is not part of parquet exports
 ALL_TABLES = [
     "blocks",

@@ -1,6 +1,6 @@
-/*.egg-info/
+/.env*
 /.venv/
 /data/
-/.env*
+/src/*.egg-info/
 
 __pycache__/
