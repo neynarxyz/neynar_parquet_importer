@@ -25,7 +25,10 @@ def download_latest_full(s3_client, settings: Settings, table_name, progress_cal
 
     full_name = latest_file["Key"].split("/")[-1]
 
-    local_file_path = os.path.join(settings.local_full_dir, full_name)
+    local_file_path = os.path.join(
+        settings.target_dir(),
+        full_name,
+    )
 
     if os.path.exists(local_file_path):
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
@@ -61,8 +64,10 @@ def download_incremental(
     parquet_name = f"{incremental_name}.parquet"
     empty_name = f"{incremental_name}.empty"
 
-    local_parquet_path = os.path.join(settings.local_incremental_dir, parquet_name)
-    local_empty_path = os.path.join(settings.local_incremental_dir, empty_name)
+    target_dir = settings.target_dir()
+
+    local_parquet_path = os.path.join(target_dir, parquet_name)
+    local_empty_path = os.path.join(target_dir, empty_name)
 
     # TODO: check if the file is already in the database. if its been fully imported, return now
 

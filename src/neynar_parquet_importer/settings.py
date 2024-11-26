@@ -10,8 +10,7 @@ class Settings(BaseSettings):
 
     incremental_duration: int = Field(300, alias="npe_duration")
     interactive_debug: bool = False
-    local_full_dir: Path = Path("./data/parquet/full")
-    local_incremental_dir: Path = Path("./data/parquet/incremental")
+    local_input_dir: Path = Path("./data/parquet")
     npe_version: str = "v2"
     parquet_s3_bucket: str = "tf-premium-parquet"
     parquet_s3_database: str = "public-postgres"
@@ -32,3 +31,11 @@ class Settings(BaseSettings):
             prefix += f"{self.incremental_duration}/"
 
         return prefix
+
+    def target_dir(self):
+        return (
+            self.local_input_dir
+            / self.npe_version
+            / self.parquet_s3_database
+            / self.parquet_s3_schema
+        )

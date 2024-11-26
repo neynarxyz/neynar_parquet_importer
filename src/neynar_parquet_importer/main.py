@@ -200,11 +200,9 @@ def main(settings: Settings):
 
     db_engine = init_db(str(settings.postgres_dsn), tables, settings)
 
-    if not settings.local_full_dir.exists():
-        settings.local_full_dir.mkdir(parents=True)
-
-    if not settings.local_incremental_dir.exists():
-        settings.local_incremental_dir.mkdir(parents=True)
+    target_dir = settings.target_dir()
+    if not target_dir.exists():
+        target_dir.mkdir(parents=True)
 
     with ExitStack() as stack:
         # these pretty progress bars show when you run the application in an interactive terminal
