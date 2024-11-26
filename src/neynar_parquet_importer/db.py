@@ -1,5 +1,6 @@
 import glob
 import json
+from os import path
 import re
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
@@ -276,5 +277,22 @@ def import_parquet(
 
             # save the rows and the tracking update together
             conn.commit()
+
+            if num_row_groups == i:
+                file_size = path.getsize(local_filename)
+
+                # TODO: extract the file age from the filename. `time() - file_end_timestamp`
+
+                # TODO: datadog metrics instead?
+                LOGGER.info(
+                    "finished import",
+                    extra={
+                        "table_name": table_name,
+                        "file_name": local_filename,
+                        "num_row_groups": num_row_groups,
+                        "num_rows": parquet_file.metadata.num_rows,
+                        "file_size": file_size,
+                    },
+                )
 
             progress_callback(1)
