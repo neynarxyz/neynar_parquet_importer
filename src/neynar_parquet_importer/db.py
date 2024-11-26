@@ -1,3 +1,4 @@
+from functools import lru_cache
 import glob
 import json
 from os import path
@@ -74,9 +75,7 @@ def check_for_existing_incremental_import(engine, settings: Settings, table_name
     """Returns the filename for the newest incremental. This may only be partially imported."""
 
     # TODO: cache this Table?
-    parquet_import_tracking = Table(
-        "parquet_import_tracking", MetaData(), autoload_with=engine
-    )
+    parquet_import_tracking = get_table(engine, "parquet_import_tracking")
 
     stmt = (
         select(
@@ -104,9 +103,7 @@ def check_for_existing_incremental_import(engine, settings: Settings, table_name
 def check_for_existing_full_import(engine, settings: Settings, table_name):
     """Returns the filename of the newest full import (there should really only be one). This may only be partially imported."""
 
-    parquet_import_tracking = Table(
-        "parquet_import_tracking", MetaData(), autoload_with=engine
-    )
+    parquet_import_tracking = get_table(engine, "parquet_import_tracking")
 
     stmt = (
         select(
@@ -137,6 +134,12 @@ def clean_parquet_data(col_name, value):
     return value
 
 
+@lru_cache(None)
+def get_table(engine, table_name):
+    metadata = MetaData()
+    return Table(table_name, metadata, autoload_with=engine)
+
+
 def import_parquet(
     engine,
     table_name,
@@ -148,10 +151,8 @@ def import_parquet(
 ):
     assert table_name in local_filename
 
-    metadata = MetaData()
-    table = Table(table_name, metadata, autoload_with=engine)
-
-    tracking_table = Table("parquet_import_tracking", metadata, autoload_with=engine)
+    table = get_table(engine, table_name)
+    tracking_table = get_table(engine, "parquet_import_tracking")
 
     is_empty = local_filename.endswith(".empty")
 
@@ -164,6 +165,7 @@ def import_parquet(
 
     with engine.connect() as conn:
         # check the database to see if we've already imported this file
+        # TODO: do an insert on conflict do nothing instead of a select
         query = select(
             tracking_table.c.id, tracking_table.c.last_row_group_imported
         ).where(tracking_table.c.file_name == local_filename)
@@ -260,9 +262,11 @@ def import_parquet(
             # insert or update the rows
             stmt = pg_insert(table).values(rows)
 
+            # TODO: only upsert where updated_at is newer than the existing row
             upsert_stmt = stmt.on_conflict_do_update(
                 index_elements=primary_key_columns,
                 set_={col: stmt.excluded[col] for col in data.keys()},
+                where=(stmt.excluded["updated_at"] > table.c.updated_at),
             )
 
             conn.execute(upsert_stmt)
