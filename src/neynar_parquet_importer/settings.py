@@ -13,10 +13,10 @@ class Settings(BaseSettings):
     local_full_dir: Path = Path("./data/parquet/full")
     local_incremental_dir: Path = Path("./data/parquet/incremental")
     npe_version: str = "v2"
-    parquet_s3_bucket = "tf-premium-parquet"
-    parquet_s3_database = "public-postgres"
-    parquet_s3_schema = "farcaster"
-    postgres_dsn: PostgresDsn = "postgresql+psycopg2://postgres:postgres@postgres:5432/example_neynar_parquet_importer"
+    parquet_s3_bucket: str = "tf-premium-parquet"
+    parquet_s3_database: str = "public-postgres"
+    parquet_s3_schema: str = "farcaster"
+    postgres_dsn: PostgresDsn = "postgresql+psycopg2://postgres:postgres@localhost:15432/example_neynar_parquet_importer"
     postgres_pool_size: int = 50
     postgres_schema: Optional[str] = None
     s3_pool_size: int = 50

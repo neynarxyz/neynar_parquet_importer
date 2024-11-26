@@ -49,10 +49,9 @@ def download_incremental(
     settings: Settings,
     tablename,
     start_timestamp,
-    duration,
     progress_callback,
 ):
-    end_timestamp = start_timestamp + duration
+    end_timestamp = start_timestamp + settings.incremental_duration
 
     incremental_name = (
         f"{settings.parquet_s3_schema}-{tablename}-{start_timestamp}-{end_timestamp}"

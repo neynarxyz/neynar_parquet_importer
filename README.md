@@ -36,20 +36,13 @@ Install `uv`:
 
     brew install uv
 
-Set up the python environment:
-
-    python3.12 -m .venv venv
-    . .venv/bin/activate
-    pip install -U pip
-    pip install --use-pep517 -r requirements.txt -e . ruff pip-tools
-
 Edit your configuration. The database host/port will probably need to go to "localhost:15432" instead of "postgres:5432":
 
     open -t .env
 
 Run the app:
 
-    INTERACTIVE_DEBUG=true python -m neynar_parquet_importer.main
+    INTERACTIVE_DEBUG=true uv run python -m neynar_parquet_importer.main
 
 NOTE: INTERACTIVE_DEBUG makes python open a shell if an exception happens. This can be useful for debugging but shouldn't be used in production.
 
@@ -57,10 +50,9 @@ Lint your code:
 
     ruff neynar_parquet_importer
 
-Upgrade dependencies:
+Upgrade dependencies ([OfficialDocs](https://docs.astral.sh/uv/concepts/projects/sync/#upgrading-locked-package-versions)):
 
-    pip-compile -U setup.py
-    pip install --use-pep517 -r requirements.txt -e .
+    uv lock --upgrade
 
 
 ## Notes and Todo

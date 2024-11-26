@@ -4,6 +4,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
+import dotenv
 from ipdb import launch_ipdb_on_exception
 from rich.logging import RichHandler
 from rich.live import Live
@@ -26,6 +27,7 @@ from .db import (
 from .s3 import (
     download_incremental,
     download_latest_full,
+    get_s3_client,
 )
 from .settings import Settings
 
@@ -33,22 +35,27 @@ LOGGER = logging.getLogger("app")
 
 # TODO: fetch this from env? tools to generate this list from the s3 bucket?
 # NOTE: "messages" is very large and so is not part of parquet exports
-ALL_TABLES = [
-    "blocks",
-    "casts",
-    "channel_follows",
-    "fids",
-    "fnames",
-    "links",
-    "power_users",
-    "profile_with_addresses",
-    "reactions",
-    "signers",
-    "storage",
-    "user_data",
-    "verifications",
-    "warpcast_power_users",
-]
+ALL_TABLES = {
+    ("public-postgres", "farcaster"): [
+        "blocks",
+        "casts",
+        "channel_follows",
+        "fids",
+        "fnames",
+        "links",
+        "power_users",
+        "profile_with_addresses",
+        "reactions",
+        "signers",
+        "storage",
+        "user_data",
+        "verifications",
+        "warpcast_power_users",
+    ],
+    ("public-postgres", "nindexer"): [
+        "verifications",
+    ],
+}
 
 
 def parse_parquet_filename(filename):
@@ -79,7 +86,11 @@ def sync_parquet_to_db(
     """
     last_import_filename = None
 
-    incremental_filename = check_for_existing_incremental_import(db_engine, table_name)
+    s3_client = get_s3_client(settings)
+
+    incremental_filename = check_for_existing_incremental_import(
+        db_engine, settings, table_name
+    )
     if incremental_filename:
         # if we have imported an incremental, then we should start there instead of at the full
         LOGGER.info("Found existing incremental import %s", incremental_filename)
@@ -109,16 +120,21 @@ def sync_parquet_to_db(
 
     if last_import_filename is None:
         # no incrementals yet (or a very old one), start with the newest full file
-        full_filename = check_for_existing_full_import(db_engine, table_name)
+        full_filename = check_for_existing_full_import(db_engine, settings, table_name)
 
         if full_filename is None or not os.path.exists(full_filename):
             # if no full export, download the latest one
             full_filename = download_latest_full(
-                table_name, full_bytes_downloaded_progress
+                s3_client, settings, table_name, full_bytes_downloaded_progress
             )
 
         import_parquet(
-            db_engine, table_name, full_filename, "full", full_steps_progress
+            db_engine,
+            table_name,
+            full_filename,
+            "full",
+            full_steps_progress,
+            settings,
         )
 
         last_import_filename = full_filename
@@ -137,9 +153,10 @@ def sync_parquet_to_db(
             time.sleep(next_end_timestamp - now)
 
         incremental_filename = download_incremental(
+            s3_client,
+            settings,
             table_name,
             next_start_timestamp,
-            settings.incremental_duration,
             incremental_bytes_downloaded_progress,
         )
 
@@ -163,6 +180,7 @@ def sync_parquet_to_db(
             incremental_filename,
             "incremental",
             incremental_steps_progress,
+            settings,
         )
 
 
@@ -174,7 +192,7 @@ def main(settings: Settings):
 
     LOGGER.info("Tables: %s", ",".join(tables))
 
-    db_engine = init_db(settings.postgres_dsn, settings.postgres_pool_size)
+    db_engine = init_db(str(settings.postgres_dsn), tables, settings)
 
     if not settings.local_full_dir.exists():
         settings.local_full_dir.mkdir(parents=True)
@@ -278,6 +296,8 @@ def main(settings: Settings):
 
 
 if __name__ == "__main__":
+    dotenv.load_dotenv()
+
     settings = Settings()
 
     # TODO: check env var to enable json logging

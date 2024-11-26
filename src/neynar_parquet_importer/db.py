@@ -1,4 +1,6 @@
+import glob
 import json
+import re
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -16,15 +18,48 @@ JSON_COLUMNS = [
 ]
 
 
-def init_db(uri, pool_size):
+def init_db(uri, parquet_tables, settings: Settings):
     """Initialize the database with our simple schema."""
-    engine = create_engine(uri, pool_size=pool_size, max_overflow=2)
+    engine = create_engine(uri, pool_size=settings.postgres_pool_size, max_overflow=2)
 
     LOGGER.info("migrating...")
     with engine.connect() as connection:
-        # TODO: how should we set a custom schema?
-        with open("schema.sql", "r") as f:
-            connection.execute(text(f.read()))
+        # set the schema if we have one configured. otherwise everything goes into "public"
+        if settings.postgres_schema:
+            connection.execute(
+                "SET search_path TO :schema_name",
+                {"schema_name": settings.postgres_schema},
+            )
+
+        pattern = r"schema/(?P<num>\d{3})_(?P<parquet_db_name>[a-zA-Z0-9-]+)_(?P<parquet_schema_name>[a-zA-Z0-9-]+)_(?P<parquet_table_name>[a-zA-Z0-9_]+)\.sql"
+
+        for filename in sorted(glob.glob("schema/*.sql")):
+            m = re.match(pattern, filename)
+
+            if m:
+                parts = m.groupdict()
+
+                LOGGER.debug(parts)
+
+                if parts["parquet_db_name"] == "all":
+                    pass
+                elif (
+                    parts["parquet_db_name"] == settings.parquet_s3_database
+                    and parts["parquet_schema_name"] == settings.parquet_s3_schema
+                    and parts["parquet_table_name"] in parquet_tables
+                ):
+                    pass
+                else:
+                    LOGGER.info("Skipping %s", filename)
+                    continue
+            else:
+                LOGGER.info("Skipping %s", filename)
+                continue
+
+            LOGGER.info("Applying %s", filename)
+
+            with open(filename, "r") as f:
+                connection.execute(text(f.read()))
 
         # TODO: honestly not sure why i need this. i thought it would auto commit
         connection.commit()
