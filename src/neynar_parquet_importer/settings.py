@@ -34,8 +34,7 @@ class Settings(BaseSettings):
 
     def target_dir(self):
         return (
-            self.local_input_dir
-            / self.npe_version
-            / self.parquet_s3_database
-            / self.parquet_s3_schema
+            self.local_input_dir / self.npe_version / self.parquet_s3_database
+            # don't include the schema. it's alredy in the filename
+            # / self.parquet_s3_schema
         )
