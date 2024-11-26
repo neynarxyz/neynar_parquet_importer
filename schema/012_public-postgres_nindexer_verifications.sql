@@ -1,6 +1,7 @@
-CREATE TABLE IF NOT EXISTS nindexer_verifications
+-- TODO: this will conflict with the public-postgres "verifications" table
+CREATE TABLE IF NOT EXISTS verifications
 (
-    id bigint PRIMARY KEY,
+    id UUID PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone,
