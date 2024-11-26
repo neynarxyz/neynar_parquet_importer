@@ -50,6 +50,7 @@ def download_incremental(
     tablename,
     start_timestamp,
     progress_callback,
+    empty_callback,
 ):
     end_timestamp = start_timestamp + settings.incremental_duration
 
@@ -103,14 +104,15 @@ def download_incremental(
         else:
             raise
 
-    # If ".parquet" file doesn't exist, try with ".empty"
+    # If ".parquet" file doesn't exist, check for ".empty"
+    # we don't actually download it because it's empty
     try:
-        s3_client.download_file(
-            settings.parquet_s3_bucket,
-            incremental_s3_prefix + empty_name,
-            local_empty_path,
-        )
-        LOGGER.debug("Downloaded empty: %s", local_empty_path)
+        s3_client.head_object(
+            Bucket=settings.parquet_s3_bucket,
+            Key=incremental_s3_prefix + empty_name,
+        )["ContentLength"]
+
+        empty_callback.more_steps(1)
 
         return local_empty_path
     except botocore.exceptions.ClientError as e:

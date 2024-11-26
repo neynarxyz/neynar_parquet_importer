@@ -142,6 +142,7 @@ def import_parquet(
     local_filename,
     file_type,
     progress_callback,
+    empty_callback,
     settings: Settings,
 ):
     assert table_name in local_filename
@@ -155,6 +156,7 @@ def import_parquet(
 
     if is_empty:
         num_row_groups = 0
+        # TODO: maybe have an option to return here instead of saving the ".empty" into the database
     else:
         parquet_file = pq.ParquetFile(local_filename)
         num_row_groups = parquet_file.num_row_groups
@@ -190,7 +192,10 @@ def import_parquet(
             (tracking_id, last_row_group_imported) = result
 
         if is_empty:
-            LOGGER.info("Skipping import of empty file %s", local_filename)
+            LOGGER.debug("Imported empty file: %s", local_filename)
+            # no need to continue on here. we can return early
+            empty_callback(1)
+            conn.commit()
             return
 
         if last_row_group_imported is None:

@@ -59,7 +59,7 @@ ALL_TABLES = {
 
 
 def parse_parquet_filename(filename):
-    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", filename)
+    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", filename)
     if match:
         return {
             "db_name": match.group(1),
@@ -78,6 +78,7 @@ def sync_parquet_to_db(
     incremental_bytes_downloaded_progress,
     full_steps_progress,
     incremental_steps_progress,
+    empty_steps_progress,
     settings: Settings,
 ):
     """Function that runs forever (barring exceptions) to download and import parquet files for a table.
@@ -101,10 +102,12 @@ def sync_parquet_to_db(
             ]
 
             incremental_filename = download_incremental(
+                s3_client,
+                settings,
                 table_name,
                 last_start_timestamp,
-                settings.incremental_duration,
                 incremental_bytes_downloaded_progress,
+                empty_steps_progress,
             )
 
         if incremental_filename:
@@ -114,6 +117,8 @@ def sync_parquet_to_db(
                 incremental_filename,
                 "incremental",
                 incremental_steps_progress,
+                empty_steps_progress,
+                settings,
             )
 
             last_import_filename = incremental_filename
@@ -134,6 +139,7 @@ def sync_parquet_to_db(
             full_filename,
             "full",
             full_steps_progress,
+            empty_steps_progress,
             settings,
         )
 
@@ -158,6 +164,7 @@ def sync_parquet_to_db(
             table_name,
             next_start_timestamp,
             incremental_bytes_downloaded_progress,
+            empty_steps_progress,
         )
 
         if incremental_filename is None:
@@ -165,14 +172,12 @@ def sync_parquet_to_db(
                 "Next incremental for %s should be ready soon. Sleeping...", table_name
             )
             # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
+            # TODO: subtraact the time that it took to download the previous file
             time.sleep(settings.incremental_duration / 2.0)
             continue
 
         next_start_timestamp += settings.incremental_duration
         next_end_timestamp += settings.incremental_duration
-
-        if incremental_filename.endswith(".empty"):
-            continue
 
         import_parquet(
             db_engine,
@@ -180,6 +185,7 @@ def sync_parquet_to_db(
             incremental_filename,
             "incremental",
             incremental_steps_progress,
+            empty_steps_progress,
             settings,
         )
 
@@ -240,6 +246,7 @@ def main(settings: Settings):
         )
         full_steps_id = steps_progress.add_task("Full", total=0)
         incremental_steps_id = steps_progress.add_task("Incremental", total=0)
+        empty_steps_id = steps_progress.add_task("Empty", total=0)
 
         full_bytes_callback = ProgressCallback(
             bytes_progress, full_bytes_downloaded_id, 0, PROGRESS_BYTES_LOCK
@@ -253,6 +260,9 @@ def main(settings: Settings):
         )
         incremental_steps_callback = ProgressCallback(
             steps_progress, incremental_steps_id, 0, PROGRESS_CHUNKS_LOCK
+        )
+        empty_steps_callback = ProgressCallback(
+            steps_progress, empty_steps_id, 0, PROGRESS_CHUNKS_LOCK
         )
 
         # do all the tables in parallel
@@ -269,6 +279,7 @@ def main(settings: Settings):
                 incremental_bytes_callback,
                 full_steps_callback,
                 incremental_steps_callback,
+                empty_steps_callback,
                 settings,
             ): table_name
             for table_name in tables
