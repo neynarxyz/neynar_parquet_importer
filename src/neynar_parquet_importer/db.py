@@ -164,35 +164,36 @@ def import_parquet(
         num_row_groups = parquet_file.num_row_groups
 
     with engine.connect() as conn:
-        # check the database to see if we've already imported this file
-        # TODO: do an insert on conflict do nothing instead of a select
-        query = select(
-            tracking_table.c.id, tracking_table.c.last_row_group_imported
-        ).where(tracking_table.c.file_name == local_filename)
-        result = conn.execute(query).fetchone()
+        # Do NOT put 0 here. That would mean that we already imported row group 0!
+        last_row_group_imported = None
 
-        if result is None:
-            LOGGER.debug("inserting %s into the tracking table", local_filename)
+        # Prepare the insert statement
+        stmt = pg_insert(tracking_table).values(
+            table_name=table_name,
+            file_name=local_filename,
+            file_type=file_type,
+            file_version=settings.npe_version,
+            file_duration_s=settings.incremental_duration,
+            is_empty=is_empty,
+            last_row_group_imported=last_row_group_imported,
+            total_row_groups=num_row_groups,
+        )
 
-            # do NOT put 0 here. that would mean that we already imported row group 0!
-            last_row_group_imported = None
+        upsert_stmt = stmt.on_conflict_do_update(
+            index_elements=["file_name"],  # Use the unique constraint columns
+            set_={
+                # No actual data changes; this is a no-op update
+                "last_row_group_imported": tracking_table.c.last_row_group_imported,
+            },
+        ).returning(tracking_table.c.id, tracking_table.c.last_row_group_imported)
 
-            insert = tracking_table.insert().values(
-                table_name=table_name,
-                file_name=local_filename,
-                file_type=file_type,
-                file_version=settings.npe_version,
-                file_duration_s=settings.incremental_duration,
-                is_empty=is_empty,
-                last_row_group_imported=last_row_group_imported,
-                total_row_groups=num_row_groups,
-            )
+        # Execute the statement and fetch the result
+        result = conn.execute(upsert_stmt)
+        row = result.fetchone()
 
-            result = conn.execute(insert)
-
-            tracking_id = result.inserted_primary_key[0]
-        else:
-            (tracking_id, last_row_group_imported) = result
+        # Extract the id and last_row_group_imported
+        tracking_id = row.id
+        last_row_group_imported = row.last_row_group_imported
 
         if is_empty:
             LOGGER.debug("Imported empty file: %s", local_filename)
@@ -227,6 +228,7 @@ def import_parquet(
         primary_key_columns = table.primary_key.columns.values()
 
         # Read the data in batches
+        # TODO: parallelize the clean_parquet_data. the inserts still need to happen in order so that tracking doesn't get mixed up
         for i in range(start_row_group, num_row_groups):
             LOGGER.info(
                 "Upsert #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
@@ -239,6 +241,7 @@ def import_parquet(
 
             # collect into a different dict so that we can remove dupes
             # NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
+            # TODO: have a helper function here that makes it easier to clean up the data
             rows = {
                 tuple(
                     clean_parquet_data(pk_col.name, data[pk_col.name][i])
