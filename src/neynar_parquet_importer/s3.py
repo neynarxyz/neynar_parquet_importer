@@ -6,30 +6,15 @@ from botocore.config import Config
 from neynar_parquet_importer.app import (
     LOGGER,
 )
-
-# TODO: get this from env var
-LOCAL_FULL_DIR = "./data/parquet/full"
-LOCAL_INCREMENTAL_DIR = "./data/parquet/incremental"
-
-S3_CLIENT = boto3.client("s3", config=Config(max_pool_connections=50))
-BUCKET_NAME = "tf-premium-parquet"
-
-PARQUET_S3_PREFIX = "public-postgres/farcaster/v2"
-
-FULL_PARQUET_S3_URI = PARQUET_S3_PREFIX + "/full"
-INCREMENTAL_PARQUET_S3_URI = PARQUET_S3_PREFIX + "/incremental"
-
-if not os.path.exists(LOCAL_FULL_DIR):
-    os.makedirs(LOCAL_FULL_DIR)
-
-if not os.path.exists(LOCAL_INCREMENTAL_DIR):
-    os.makedirs(LOCAL_INCREMENTAL_DIR)
+from neynar_parquet_importer.settings import Settings
 
 
-def download_latest_full(table_name, progress_callback):
-    response = S3_CLIENT.list_objects_v2(
-        Bucket=BUCKET_NAME,
-        Prefix=FULL_PARQUET_S3_URI + f"/farcaster-{table_name}-0-",
+def download_latest_full(s3_client, settings: Settings, table_name, progress_callback):
+    s3_prefix = settings.parquet_s3_prefix() + "full/"
+
+    response = s3_client.list_objects_v2(
+        Bucket=settings.parquet_s3_bucket,
+        Prefix=s3_prefix + f"{settings.parquet_s3_schema}-{table_name}-0-",
     )
 
     latest_file = max(response["Contents"], key=lambda x: x["Key"].split("/")[-1])
@@ -40,7 +25,10 @@ def download_latest_full(table_name, progress_callback):
 
     full_name = latest_file["Key"].split("/")[-1]
 
-    local_file_path = os.path.join(LOCAL_FULL_DIR, full_name)
+    local_file_path = os.path.join(
+        settings.target_dir(),
+        full_name,
+    )
 
     if os.path.exists(local_file_path):
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
@@ -49,9 +37,9 @@ def download_latest_full(table_name, progress_callback):
     progress_callback.more_steps(latest_size_bytes)
 
     LOGGER.info("Downloading the latest full backup to %s...", local_file_path)
-    S3_CLIENT.download_file(
-        BUCKET_NAME,
-        FULL_PARQUET_S3_URI + "/" + full_name,
+    s3_client.download_file(
+        settings.parquet_s3_bucket,
+        s3_prefix + full_name,
         local_file_path,
         Callback=progress_callback,
     )
@@ -59,16 +47,27 @@ def download_latest_full(table_name, progress_callback):
     return local_file_path
 
 
-def download_incremental(tablename, start_timestamp, duration, progress_callback):
-    end_timestamp = start_timestamp + duration
+def download_incremental(
+    s3_client,
+    settings: Settings,
+    tablename,
+    start_timestamp,
+    progress_callback,
+    empty_callback,
+):
+    end_timestamp = start_timestamp + settings.incremental_duration
 
-    incremental_name = f"farcaster-{tablename}-{start_timestamp}-{end_timestamp}"
+    incremental_name = (
+        f"{settings.parquet_s3_schema}-{tablename}-{start_timestamp}-{end_timestamp}"
+    )
 
     parquet_name = f"{incremental_name}.parquet"
     empty_name = f"{incremental_name}.empty"
 
-    local_parquet_path = os.path.join(LOCAL_INCREMENTAL_DIR, parquet_name)
-    local_empty_path = os.path.join(LOCAL_INCREMENTAL_DIR, empty_name)
+    target_dir = settings.target_dir()
+
+    local_parquet_path = os.path.join(target_dir, parquet_name)
+    local_empty_path = os.path.join(target_dir, empty_name)
 
     # TODO: check if the file is already in the database. if its been fully imported, return now
 
@@ -82,19 +81,22 @@ def download_incremental(tablename, start_timestamp, duration, progress_callback
         LOGGER.debug("%s already exists locally. Skipping download", local_empty_path)
         return local_empty_path
 
+    incremental_s3_prefix = settings.parquet_s3_prefix() + "incremental/"
+
     # Try downloading with ".parquet" extension first
     try:
         # TODO: get filesize before downloading for the progress bar
-        latest_size_bytes = S3_CLIENT.head_object(
-            Bucket=BUCKET_NAME, Key=INCREMENTAL_PARQUET_S3_URI + "/" + parquet_name
+        latest_size_bytes = s3_client.head_object(
+            Bucket=settings.parquet_s3_bucket,
+            Key=incremental_s3_prefix + parquet_name,
         )["ContentLength"]
 
         progress_callback.more_steps(latest_size_bytes)
 
         # TODO: callback on this download to update the progress bar
-        S3_CLIENT.download_file(
-            BUCKET_NAME,
-            INCREMENTAL_PARQUET_S3_URI + "/" + parquet_name,
+        s3_client.download_file(
+            settings.parquet_s3_bucket,
+            incremental_s3_prefix + parquet_name,
             local_parquet_path,
             Callback=progress_callback,
         )
@@ -107,14 +109,15 @@ def download_incremental(tablename, start_timestamp, duration, progress_callback
         else:
             raise
 
-    # If ".parquet" file doesn't exist, try with ".empty"
+    # If ".parquet" file doesn't exist, check for ".empty"
+    # we don't actually download it because it's empty
     try:
-        S3_CLIENT.download_file(
-            BUCKET_NAME,
-            INCREMENTAL_PARQUET_S3_URI + "/" + empty_name,
-            local_empty_path,
-        )
-        LOGGER.debug("Downloaded empty: %s", local_empty_path)
+        s3_client.head_object(
+            Bucket=settings.parquet_s3_bucket,
+            Key=incremental_s3_prefix + empty_name,
+        )["ContentLength"]
+
+        empty_callback.more_steps(1)
 
         return local_empty_path
     except botocore.exceptions.ClientError as e:
@@ -124,3 +127,7 @@ def download_incremental(tablename, start_timestamp, duration, progress_callback
             raise
 
     return None
+
+
+def get_s3_client(settings: Settings):
+    return boto3.client("s3", config=Config(max_pool_connections=settings.s3_pool_size))

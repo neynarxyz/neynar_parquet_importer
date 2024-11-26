@@ -1,10 +1,10 @@
-from contextlib import ExitStack
 import logging
 import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dotenv import load_dotenv
+from contextlib import ExitStack
+import dotenv
 from ipdb import launch_ipdb_on_exception
 from rich.logging import RichHandler
 from rich.live import Live
@@ -27,28 +27,48 @@ from .db import (
 from .s3 import (
     download_incremental,
     download_latest_full,
+    get_s3_client,
 )
+from .settings import Settings
 
 LOGGER = logging.getLogger("app")
-INCREMENTAL_SECONDS = 5 * 60
 
+# TODO: fetch this from env? tools to generate this list from the s3 bucket?
 # NOTE: "messages" is very large and so is not part of parquet exports
-ALL_TABLES = [
-    "blocks",
-    "casts",
-    "channel_follows",
-    "fids",
-    "fnames",
-    "links",
-    "power_users",
-    "profile_with_addresses",
-    "reactions",
-    "signers",
-    "storage",
-    "user_data",
-    "verifications",
-    "warpcast_power_users",
-]
+ALL_TABLES = {
+    ("public-postgres", "farcaster"): [
+        "blocks",
+        "casts",
+        "channel_follows",
+        "fids",
+        "fnames",
+        "links",
+        "power_users",
+        "profile_with_addresses",
+        "reactions",
+        "signers",
+        "storage",
+        "user_data",
+        "verifications",
+        "warpcast_power_users",
+    ],
+    ("public-postgres", "nindexer"): [
+        "verifications",
+    ],
+}
+
+
+def parse_parquet_filename(filename):
+    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", filename)
+    if match:
+        return {
+            "db_name": match.group(1),
+            "table_name": match.group(2),
+            "start_timestamp": int(match.group(3)),
+            "end_timestamp": int(match.group(4)),
+        }
+    else:
+        raise ValueError("Parquet filename does not match expected format.", filename)
 
 
 def sync_parquet_to_db(
@@ -58,82 +78,106 @@ def sync_parquet_to_db(
     incremental_bytes_downloaded_progress,
     full_steps_progress,
     incremental_steps_progress,
+    empty_steps_progress,
+    settings: Settings,
 ):
     """Function that runs forever (barring exceptions) to download and import parquet files for a table.
 
     TODO: run downloads and imports in parallel to improve initial sync times
     """
-    incremental_filename = check_for_existing_incremental_import(db_engine, table_name)
+    last_import_filename = None
+
+    s3_client = get_s3_client(settings)
+
+    incremental_filename = check_for_existing_incremental_import(
+        db_engine, settings, table_name
+    )
     if incremental_filename:
         # if we have imported an incremental, then we should start there instead of at the full
         LOGGER.info("Found existing incremental import %s", incremental_filename)
 
-        import_parquet(
-            db_engine,
-            table_name,
-            incremental_filename,
-            "incremental",
-            incremental_steps_progress,
-        )
+        if not os.path.exists(incremental_filename):
+            last_start_timestamp = parse_parquet_filename(incremental_filename)[
+                "start_timestamp"
+            ]
 
-        last_import_filename = incremental_filename
-    else:
-        # no incrementals yet, start with the newest full file
-        full_filename = check_for_existing_full_import(db_engine, table_name)
+            incremental_filename = download_incremental(
+                s3_client,
+                settings,
+                table_name,
+                last_start_timestamp,
+                incremental_bytes_downloaded_progress,
+                empty_steps_progress,
+            )
 
-        if full_filename is None:
+        if incremental_filename:
+            import_parquet(
+                db_engine,
+                table_name,
+                incremental_filename,
+                "incremental",
+                incremental_steps_progress,
+                empty_steps_progress,
+                settings,
+            )
+
+            last_import_filename = incremental_filename
+
+    if last_import_filename is None:
+        # no incrementals yet (or a very old one), start with the newest full file
+        full_filename = check_for_existing_full_import(db_engine, settings, table_name)
+
+        if full_filename is None or not os.path.exists(full_filename):
             # if no full export, download the latest one
             full_filename = download_latest_full(
-                table_name, full_bytes_downloaded_progress
+                s3_client, settings, table_name, full_bytes_downloaded_progress
             )
 
         import_parquet(
-            db_engine, table_name, full_filename, "full", full_steps_progress
+            db_engine,
+            table_name,
+            full_filename,
+            "full",
+            full_steps_progress,
+            empty_steps_progress,
+            settings,
         )
 
         last_import_filename = full_filename
 
-    # TODO: check the database to see if we've already imported incrementals
-    # TODO: when writing more advanced logic for skipping handled files, be sure not to miss any! upgrades or outages might cause a file to be missing for a couple hours
-    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.parquet", last_import_filename)
-    if match:
-        # db_name = match.group(1)
-        # table_name = match.group(2)
-        # start_timestamp = match.group(3)
-        next_start_timestamp = int(match.group(4))
-    else:
-        raise ValueError(
-            "Last Import filename does not match expected format.", last_import_filename
-        )
+    next_start_timestamp = parse_parquet_filename(last_import_filename)["end_timestamp"]
+    next_end_timestamp = next_start_timestamp + settings.incremental_duration
 
     # TODO: subscribe to the SNS topic and read from it instead of polling
 
     # download all the incrementals. loops forever
     while True:
-        now = int(time.time())
+        now = time.time()
 
-        if now < next_start_timestamp:
+        if now < next_end_timestamp:
             LOGGER.info("Sleeping until the next incremental is ready")
-            time.sleep(next_start_timestamp - now)
+            time.sleep(next_end_timestamp - now)
 
         incremental_filename = download_incremental(
+            s3_client,
+            settings,
             table_name,
             next_start_timestamp,
-            INCREMENTAL_SECONDS,
             incremental_bytes_downloaded_progress,
+            empty_steps_progress,
         )
 
         if incremental_filename is None:
             LOGGER.debug(
                 "Next incremental for %s should be ready soon. Sleeping...", table_name
             )
-            time.sleep(60)
+            # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
+            # TODO: subtraact the time that it took to download the previous file
+            time.sleep(settings.incremental_duration / 2.0)
             continue
 
-        next_start_timestamp += INCREMENTAL_SECONDS
-
-        if incremental_filename.endswith(".empty"):
-            continue
+        next_start_timestamp += settings.incremental_duration
+        next_end_timestamp += settings.incremental_duration
 
         import_parquet(
             db_engine,
@@ -141,23 +185,24 @@ def sync_parquet_to_db(
             incremental_filename,
             "incremental",
             incremental_steps_progress,
+            empty_steps_progress,
+            settings,
         )
 
 
-def main():
-    tables = os.getenv("TABLES")
-
-    if tables:
-        tables = tables.split(",")
+def main(settings: Settings):
+    if settings.tables:
+        tables = settings.tables.split(",")
     else:
         tables = ALL_TABLES
 
     LOGGER.info("Tables: %s", ",".join(tables))
 
-    # connect to and set up the database
-    pool_size = len(tables) * 2
+    db_engine = init_db(str(settings.postgres_dsn), tables, settings)
 
-    db_engine = init_db(os.getenv("DATABASE_URI"), pool_size)
+    target_dir = settings.target_dir()
+    if not target_dir.exists():
+        target_dir.mkdir(parents=True)
 
     with ExitStack() as stack:
         # these pretty progress bars show when you run the application in an interactive terminal
@@ -199,6 +244,7 @@ def main():
         )
         full_steps_id = steps_progress.add_task("Full", total=0)
         incremental_steps_id = steps_progress.add_task("Incremental", total=0)
+        empty_steps_id = steps_progress.add_task("Empty", total=0)
 
         full_bytes_callback = ProgressCallback(
             bytes_progress, full_bytes_downloaded_id, 0, PROGRESS_BYTES_LOCK
@@ -212,6 +258,9 @@ def main():
         )
         incremental_steps_callback = ProgressCallback(
             steps_progress, incremental_steps_id, 0, PROGRESS_CHUNKS_LOCK
+        )
+        empty_steps_callback = ProgressCallback(
+            steps_progress, empty_steps_id, 0, PROGRESS_CHUNKS_LOCK
         )
 
         # do all the tables in parallel
@@ -228,6 +277,8 @@ def main():
                 incremental_bytes_callback,
                 full_steps_callback,
                 incremental_steps_callback,
+                empty_steps_callback,
+                settings,
             ): table_name
             for table_name in tables
         }
@@ -243,6 +294,9 @@ def main():
             # the result should always be ready. no timeout is needed
             try:
                 table_result = future.result()
+
+                # TODO: do something with `table_result`?
+                table_result
             except Exception:
                 LOGGER.exception("Table %s failed", table_name)
 
@@ -251,7 +305,9 @@ def main():
 
 
 if __name__ == "__main__":
-    load_dotenv()
+    dotenv.load_dotenv()
+
+    settings = Settings()
 
     # TODO: check env var to enable json logging
     logging.basicConfig(
@@ -268,8 +324,8 @@ if __name__ == "__main__":
     logging.getLogger("botocore").setLevel(logging.INFO)
     logging.getLogger("urllib3").setLevel(logging.INFO)
 
-    if os.getenv("INTERACTIVE_DEBUG") == "true":
+    if settings.interactive_debug:
         with launch_ipdb_on_exception():
-            main()
+            main(settings)
     else:
-        main()
+        main(settings)
