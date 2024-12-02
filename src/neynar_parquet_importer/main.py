@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 import dotenv
 from ipdb import launch_ipdb_on_exception
-from rich.logging import RichHandler
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
@@ -17,6 +16,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
+
 from .app import PROGRESS_BYTES_LOCK, PROGRESS_CHUNKS_LOCK, ProgressCallback
 from .db import (
     check_for_existing_full_import,
@@ -24,6 +24,7 @@ from .db import (
     import_parquet,
     init_db,
 )
+from .logging import setup_logging
 from .s3 import (
     download_incremental,
     download_latest_full,
@@ -309,13 +310,7 @@ if __name__ == "__main__":
 
     settings = Settings()
 
-    # TODO: check env var to enable json logging
-    logging.basicConfig(
-        level=logging.NOTSET,
-        format="%(name)s - %(message)s",
-        datefmt="%X",
-        handlers=[RichHandler()],
-    )
+    setup_logging(settings.log_debug, settings.log_format)
 
     # TODO: env vars to control logging
     logging.getLogger("app").setLevel(logging.INFO)

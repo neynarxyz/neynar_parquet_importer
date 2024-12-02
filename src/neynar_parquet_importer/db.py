@@ -7,8 +7,8 @@ import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from neynar_parquet_importer.app import LOGGER
-from neynar_parquet_importer.settings import Settings
+from .logging import LOGGER
+from .settings import Settings
 
 # TODO: detect this from the table
 # arrays and json columns are stored as json in parquet because that was easier than dealing with the schema
@@ -74,9 +74,9 @@ def init_db(uri, parquet_tables, settings: Settings):
 def check_for_existing_incremental_import(engine, settings: Settings, table_name):
     """Returns the filename for the newest incremental. This may only be partially imported."""
 
-    # TODO: cache this Table?
     parquet_import_tracking = get_table(engine, "parquet_import_tracking")
 
+    # TODO: make this much smarter. it needs to find the last one that was fully imported. there might be holes if we run things in parallel!
     stmt = (
         select(
             parquet_import_tracking.c.file_name,
@@ -196,7 +196,9 @@ def import_parquet(
         last_row_group_imported = row.last_row_group_imported
 
         if is_empty:
-            LOGGER.debug("Imported empty file: %s", local_filename)
+            LOGGER.debug(
+                "Imported empty file with id %s: %s", tracking_id, local_filename
+            )
             # no need to continue on here. we can return early
             empty_callback(1)
             conn.commit()

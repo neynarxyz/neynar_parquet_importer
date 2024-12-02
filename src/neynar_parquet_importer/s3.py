@@ -3,10 +3,8 @@ import boto3
 import botocore.exceptions
 from botocore.config import Config
 
-from neynar_parquet_importer.app import (
-    LOGGER,
-)
-from neynar_parquet_importer.settings import Settings
+from .logging import LOGGER
+from .settings import Settings
 
 
 def download_latest_full(s3_client, settings: Settings, table_name, progress_callback):
@@ -55,6 +53,7 @@ def download_incremental(
     progress_callback,
     empty_callback,
 ):
+    """Returns None if the file doesn't exist"""
     end_timestamp = start_timestamp + settings.incremental_duration
 
     incremental_name = (
@@ -84,6 +83,7 @@ def download_incremental(
     incremental_s3_prefix = settings.parquet_s3_prefix() + "incremental/"
 
     # Try downloading with ".parquet" extension first
+    # TODO: one s3_client command to get both .parquet and .empty? and maybe even the .schema?
     try:
         # TODO: get filesize before downloading for the progress bar
         latest_size_bytes = s3_client.head_object(

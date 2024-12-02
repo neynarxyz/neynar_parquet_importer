@@ -2,10 +2,9 @@
 Globals and helpers that are used across the app. You shouldn't need to modify anything here.
 """
 
-import logging
 from threading import Lock
 
-LOGGER = logging.getLogger("app")
+from .logging import LOGGER
 
 # Locks for the progress bars. This allows them to update their length in a thread-safe way.
 PROGRESS_BYTES_LOCK = Lock()

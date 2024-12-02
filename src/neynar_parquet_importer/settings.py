@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     incremental_duration: int = Field(300, alias="npe_duration")
     interactive_debug: bool = False
     local_input_dir: Path = Path("./data/parquet")
+    log_level: str = "INFO"
+    log_format: str = "json"
     npe_version: str = "v2"
     parquet_s3_bucket: str = "tf-premium-parquet"
     parquet_s3_database: str = "public-postgres"
