@@ -310,7 +310,7 @@ if __name__ == "__main__":
 
     settings = Settings()
 
-    setup_logging(settings.log_debug, settings.log_format)
+    setup_logging(settings.log_level, settings.log_format)
 
     # TODO: env vars to control logging
     logging.getLogger("app").setLevel(logging.INFO)
