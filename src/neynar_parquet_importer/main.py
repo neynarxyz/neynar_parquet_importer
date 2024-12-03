@@ -95,7 +95,7 @@ def sync_parquet_to_db(
     )
     if incremental_filename:
         # if we have imported an incremental, then we should start there instead of at the full
-        LOGGER.info("Found existing incremental import %s", incremental_filename)
+        LOGGER.debug("Found existing incremental import %s", incremental_filename)
 
         if not os.path.exists(incremental_filename):
             last_start_timestamp = parse_parquet_filename(incremental_filename)[

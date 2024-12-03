@@ -232,7 +232,7 @@ def import_parquet(
         # Read the data in batches
         # TODO: parallelize the clean_parquet_data. the inserts still need to happen in order so that tracking doesn't get mixed up
         for i in range(start_row_group, num_row_groups):
-            LOGGER.info(
+            LOGGER.debug(
                 "Upsert #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
             )
 
@@ -287,21 +287,20 @@ def import_parquet(
             # save the rows and the tracking update together
             conn.commit()
 
-            if num_row_groups == i:
-                file_size = path.getsize(local_filename)
-
-                # TODO: extract the file age from the filename. `time() - file_end_timestamp`
-
-                # TODO: datadog metrics instead?
-                LOGGER.info(
-                    "finished import",
-                    extra={
-                        "table_name": table_name,
-                        "file_name": local_filename,
-                        "num_row_groups": num_row_groups,
-                        "num_rows": parquet_file.metadata.num_rows,
-                        "file_size": file_size,
-                    },
-                )
-
             progress_callback(1)
+
+        file_size = path.getsize(local_filename)
+
+        # TODO: extract the file age from the filename. `time() - file_end_timestamp`
+
+        # TODO: datadog metrics instead?
+        LOGGER.info(
+            "finished import",
+            extra={
+                "table_name": table_name,
+                "file_name": local_filename,
+                "num_row_groups": num_row_groups,
+                "num_rows": parquet_file.metadata.num_rows,
+                "file_size": file_size,
+            },
+        )
