@@ -9,7 +9,9 @@ from .settings import Settings
 
 
 def parse_parquet_filename(filename):
-    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", filename)
+    basename = os.path.basename(filename)
+
+    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", basename)
     if match:
         return {
             "schema_name": match.group(1),
