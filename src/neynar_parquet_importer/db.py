@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from .logging import LOGGER, dogstatsd
+from .logging import LOGGER
 from .s3 import parse_parquet_filename
 from .settings import Settings
 
@@ -156,6 +156,7 @@ def import_parquet(
     assert table_name == parsed_filename["table_name"]
     schema_name = parsed_filename["schema_name"]
 
+    dogstatsd = settings.dogstatsd()
     dd_tags = [
         f"parquet_table:{schema_name}.{table_name}",
     ]

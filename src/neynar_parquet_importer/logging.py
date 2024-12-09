@@ -1,13 +1,9 @@
 import logging
 from pathlib import PosixPath
-from datadog.dogstatsd import DogStatsd
 from datetime import datetime, timedelta, UTC
 from pythonjsonlogger import jsonlogger
 from rich.logging import RichHandler
 from pprint import pformat
-
-# TODO: i think we want to get this with a lazy setup because the environment variables might not be set yet
-dogstatsd = DogStatsd()
 
 # TODO: i don't love this
 LOGGER = logging.getLogger("app")

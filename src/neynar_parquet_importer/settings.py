@@ -1,3 +1,5 @@
+import datadog
+from datadog.dogstatsd import DogStatsd
 from pathlib import Path
 from typing import Optional
 from pydantic import Field, PostgresDsn
@@ -23,6 +25,20 @@ class Settings(BaseSettings):
     postgres_schema: Optional[str] = None
     s3_pool_size: int = 50
     target_name: str = "unknown"
+
+    def dogstatsd(self):
+        if self._dogstatsd is None:
+            if self.datadog_enabled:
+                datadog.initialize(
+                    statsd_constant_tags=[
+                        f"target:{self.target_name}",
+                        f"npe_version:{self.npe_version}-{self.incremental_duration}",
+                        f"parquet_db:{self.parquet_s3_database}",
+                        f"parquet_schema:{self.parquet_s3_schema}",
+                    ],
+                )
+            self._dogstatsd = DogStatsd()
+        return self._dogstatsd
 
     def parquet_s3_prefix(self):
         prefix = (
