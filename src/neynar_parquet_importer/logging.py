@@ -80,7 +80,7 @@ class CustomRichHandler(RichHandler):
 
 
 def setup_logging(level: str, log_format: str):
-    level = getattr(logging, level, None)
+    level = getattr(logging, level.upper(), None)
 
     assert level is not None, f"Invalid log level: {level}"
 
