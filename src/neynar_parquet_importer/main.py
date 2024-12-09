@@ -4,6 +4,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
+import datadog
 import dotenv
 from ipdb import launch_ipdb_on_exception
 from rich.live import Live
@@ -318,6 +319,16 @@ if __name__ == "__main__":
     logging.getLogger("boto3").setLevel(logging.INFO)
     logging.getLogger("botocore").setLevel(logging.INFO)
     logging.getLogger("urllib3").setLevel(logging.INFO)
+
+    if settings.datadog_enabled:
+        datadog.initialize(
+            statsd_constant_tags=[
+                f"target:{settings.target_name}",
+                f"npe_version:{settings.npe_version}-{settings.incremental_duration}",
+                f"parquet_db:{settings.parquet_s3_database}",
+                f"parquet_schema:{settings.parquet_s3_schema}",
+            ],
+        )
 
     if settings.interactive_debug:
         with launch_ipdb_on_exception():

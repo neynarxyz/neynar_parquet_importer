@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     # TODO: whats the best way to take a comma seperated list of tables and convert it to a set? <https://github.com/pydantic/pydantic-settings/issues/291>
     tables: str = ""
 
+    datadog_enabled: bool = False
     incremental_duration: int = Field(300, alias="npe_duration")
     interactive_debug: bool = False
     local_input_dir: Path = Path("./data/parquet")
@@ -21,6 +22,7 @@ class Settings(BaseSettings):
     postgres_pool_size: int = 50
     postgres_schema: Optional[str] = None
     s3_pool_size: int = 50
+    target_name: str = "unknown"
 
     def parquet_s3_prefix(self):
         prefix = (
