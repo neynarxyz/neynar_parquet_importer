@@ -215,7 +215,7 @@ def import_parquet(
 
             age_s = time() - parsed_filename["end_timestamp"]
 
-            dogstatsd.gauge("parquet_rows_age_s", age_s, tags=dd_tags)
+            statsd.gauge("parquet_rows_age_s", age_s, tags=dd_tags)
 
             return
 
