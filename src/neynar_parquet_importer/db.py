@@ -306,7 +306,7 @@ def import_parquet(
 
             age_s = time() - parsed_filename["end_timestamp"]
 
-            dogstatsd.gauge("parquet_rows_age_s", age_s, tags=dd_tags)
+            dogstatsd.gauge("parquet_rows_import_age_s", age_s, tags=dd_tags)
             dogstatsd.increment(
                 "num_parquet_rows_imported",
                 value=len(batch),
