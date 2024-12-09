@@ -212,9 +212,9 @@ def import_parquet(
             empty_callback(1)
             conn.commit()
 
-            age = time() - parsed_filename["end_timestamp"]
+            age_s = time() - parsed_filename["end_timestamp"]
 
-            dogstatsd.gauge("parquet_rows_age_s", age, tags=dd_tags)
+            dogstatsd.gauge("parquet_rows_age_s", age_s, tags=dd_tags)
 
             return
 
@@ -303,9 +303,9 @@ def import_parquet(
 
             progress_callback(1)
 
-            age = time() - parsed_filename["end_timestamp"]
+            age_s = time() - parsed_filename["end_timestamp"]
 
-            dogstatsd.gauge("parquet_rows_age_s", age, tags=dd_tags)
+            dogstatsd.gauge("parquet_rows_age_s", age_s, tags=dd_tags)
             dogstatsd.increment(
                 "num_parquet_rows_imported",
                 value=len(batch),
@@ -324,6 +324,7 @@ def import_parquet(
         LOGGER.info(
             "finished import",
             extra={
+                "age_s": age_s,
                 "table_name": table_name,
                 "file_name": local_filename,
                 "num_row_groups": num_row_groups,
