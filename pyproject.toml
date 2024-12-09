@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "asttokens==2.4.1",
     "boto3==1.35.11",
-    "botocore==1.35.11",
+    "botocore==1.35.76",
     "datadog>=0.50.2",
     "decorator==5.1.1",
     "executing==2.1.0",
