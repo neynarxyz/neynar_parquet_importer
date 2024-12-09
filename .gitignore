@@ -1,6 +1,7 @@
-/*.egg-info/
+/.env*
 /.venv/
 /data/
-/.env*
+/docker-compose.*.yml
+/src/*.egg-info/
 
 __pycache__/
