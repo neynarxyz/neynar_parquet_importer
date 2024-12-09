@@ -26,15 +26,17 @@ class Settings(BaseSettings):
     s3_pool_size: int = 50
     target_name: str = "unknown"
 
-    def dogstatsd(self):
-        return get_dogstatsd(
-            self.datadog_enabled,
-            self.target_name,
-            self.npe_version,
-            self.incremental_duration,
-            self.parquet_s3_database,
-            self.parquet_s3_schema,
-        )
+    def setup_datadog(self):
+        if self.datadog_enabled:
+            datadog.initialize(
+                hostname_from_config=False,
+                statsd_constant_tags=[
+                    f"target:{self.target_name}",
+                    f"npe_version:{self.npe_version}-{self.incremental_duration}",
+                    f"parquet_db:{self.parquet_s3_database}",
+                    f"parquet_schema:{self.parquet_s3_schema}",
+                ],
+            )
 
     def parquet_s3_prefix(self):
         prefix = (
@@ -54,26 +56,3 @@ class Settings(BaseSettings):
             # don't include the schema. it's alredy in the filename
             # / self.parquet_s3_schema
         )
-
-
-@lru_cache(maxsize=1)
-def get_dogstatsd(
-    datadog_enabled,
-    target_name,
-    npe_version,
-    incremental_duration,
-    parquet_s3_database,
-    parquet_s3_schema,
-):
-    if datadog_enabled:
-        datadog.initialize(
-            hostname_from_config=False,
-            statsd_constant_tags=[
-                f"target:{target_name}",
-                f"npe_version:{npe_version}-{incremental_duration}",
-                f"parquet_db:{parquet_s3_database}",
-                f"parquet_schema:{parquet_s3_schema}",
-            ],
-        )
-
-    return datadog.statsd

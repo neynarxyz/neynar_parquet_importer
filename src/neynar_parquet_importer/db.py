@@ -1,3 +1,4 @@
+from datadog import statsd
 from functools import lru_cache
 import glob
 import json
@@ -156,7 +157,6 @@ def import_parquet(
     assert table_name == parsed_filename["table_name"]
     schema_name = parsed_filename["schema_name"]
 
-    dogstatsd = settings.dogstatsd()
     dd_tags = [
         f"parquet_table:{schema_name}.{table_name}",
     ]
@@ -306,8 +306,8 @@ def import_parquet(
 
             age_s = time() - parsed_filename["end_timestamp"]
 
-            dogstatsd.gauge("parquet_rows_import_age_s", age_s, tags=dd_tags)
-            dogstatsd.increment(
+            statsd.gauge("parquet_rows_import_age_s", age_s, tags=dd_tags)
+            statsd.increment(
                 "num_parquet_rows_imported",
                 value=len(batch),
                 tags=dd_tags,
@@ -315,7 +315,7 @@ def import_parquet(
 
         file_size = path.getsize(local_filename)
 
-        dogstatsd.increment(
+        statsd.increment(
             "parquet_bytes_imported",
             value=file_size,
             tags=dd_tags,
