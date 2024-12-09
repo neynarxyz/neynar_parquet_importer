@@ -1,6 +1,5 @@
 from functools import lru_cache
 import datadog
-from datadog.dogstatsd import DogStatsd
 from pathlib import Path
 from typing import Optional
 from pydantic import Field, PostgresDsn
@@ -75,4 +74,5 @@ def get_dogstatsd(
                 f"parquet_schema:{parquet_s3_schema}",
             ],
         )
-    return DogStatsd()
+
+    return datadog.statsd
