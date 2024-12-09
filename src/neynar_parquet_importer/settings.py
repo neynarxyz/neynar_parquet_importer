@@ -67,6 +67,7 @@ def get_dogstatsd(
 ):
     if datadog_enabled:
         datadog.initialize(
+            hostname_from_config=False,
             statsd_constant_tags=[
                 f"target:{target_name}",
                 f"npe_version:{npe_version}-{incremental_duration}",
