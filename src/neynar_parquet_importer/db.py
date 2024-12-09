@@ -3,11 +3,13 @@ import glob
 import json
 from os import path
 import re
+from time import time
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from .logging import LOGGER
+from .logging import LOGGER, dogstatsd
+from .s3 import parse_parquet_filename
 from .settings import Settings
 
 # TODO: detect this from the table
@@ -149,7 +151,14 @@ def import_parquet(
     empty_callback,
     settings: Settings,
 ):
-    assert table_name in local_filename
+    parsed_filename = parse_parquet_filename(local_filename)
+
+    assert table_name == parsed_filename["table_name"]
+    schema_name = parsed_filename["schema_name"]
+
+    dd_tags = [
+        f"parquet_table:{schema_name}.{table_name}",
+    ]
 
     table = get_table(engine, table_name)
     tracking_table = get_table(engine, "parquet_import_tracking")
@@ -202,6 +211,11 @@ def import_parquet(
             # no need to continue on here. we can return early
             empty_callback(1)
             conn.commit()
+
+            age = time() - parsed_filename["end_timestamp"]
+
+            dogstatsd.gauge("parquet_rows_age_s", age, tags=dd_tags)
+
             return
 
         if last_row_group_imported is None:
@@ -289,9 +303,22 @@ def import_parquet(
 
             progress_callback(1)
 
+            age = time() - parsed_filename["end_timestamp"]
+
+            dogstatsd.gauge("parquet_rows_age_s", age, tags=dd_tags)
+            dogstatsd.increment(
+                "num_parquet_rows_imported",
+                value=len(batch),
+                tags=dd_tags,
+            )
+
         file_size = path.getsize(local_filename)
 
-        # TODO: extract the file age from the filename. `time() - file_end_timestamp`
+        dogstatsd.increment(
+            "parquet_bytes_imported",
+            value=file_size,
+            tags=dd_tags,
+        )
 
         # TODO: datadog metrics instead?
         LOGGER.info(

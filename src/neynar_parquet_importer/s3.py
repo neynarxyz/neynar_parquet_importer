@@ -1,10 +1,24 @@
 import os
+import re
 import boto3
 import botocore.exceptions
 from botocore.config import Config
 
 from .logging import LOGGER
 from .settings import Settings
+
+
+def parse_parquet_filename(filename):
+    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", filename)
+    if match:
+        return {
+            "schema_name": match.group(1),
+            "table_name": match.group(2),
+            "start_timestamp": int(match.group(3)),
+            "end_timestamp": int(match.group(4)),
+        }
+    else:
+        raise ValueError("Parquet filename does not match expected format.", filename)
 
 
 def download_latest_full(s3_client, settings: Settings, table_name, progress_callback):

@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
@@ -17,7 +16,6 @@ from rich.progress import (
 )
 from rich.table import Table
 
-
 from .app import PROGRESS_BYTES_LOCK, PROGRESS_CHUNKS_LOCK, ProgressCallback
 from .db import (
     check_for_existing_full_import,
@@ -30,6 +28,7 @@ from .s3 import (
     download_incremental,
     download_latest_full,
     get_s3_client,
+    parse_parquet_filename,
 )
 from .settings import Settings
 
@@ -58,19 +57,6 @@ ALL_TABLES = {
         "verifications",
     ],
 }
-
-
-def parse_parquet_filename(filename):
-    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", filename)
-    if match:
-        return {
-            "db_name": match.group(1),
-            "table_name": match.group(2),
-            "start_timestamp": int(match.group(3)),
-            "end_timestamp": int(match.group(4)),
-        }
-    else:
-        raise ValueError("Parquet filename does not match expected format.", filename)
 
 
 def sync_parquet_to_db(
