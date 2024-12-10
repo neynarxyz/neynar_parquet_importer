@@ -1,4 +1,3 @@
-from functools import lru_cache
 import logging
 import datadog
 from pathlib import Path
@@ -57,7 +56,7 @@ class Settings(BaseSettings):
         if self.datadog_enabled:
             logging.getLogger("datadog.dogstatsd").setLevel(logging.INFO)
         else:
-            logging.getLogger("datadog.dogstatsd").setLevel(logging.CRITICAL)
+            logging.getLogger("datadog.dogstatsd").setLevel(100)
 
     def parquet_s3_prefix(self):
         prefix = (

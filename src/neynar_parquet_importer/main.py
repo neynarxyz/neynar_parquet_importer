@@ -140,6 +140,9 @@ def sync_parquet_to_db(
     # download all the incrementals. loops forever
     fs = []
     while True:
+        # mark files completed in order. this keeps us from skipping items if we have to restart
+        # TODO: i don't love this, but it seems to work okay
+        max_wait = time.time() + 0.1
         while fs:
             if fs[0].done():
                 f = fs.pop(0)
@@ -147,24 +150,20 @@ def sync_parquet_to_db(
                 incremental_filename = f.result()
 
                 mark_completed(db_engine, parquet_import_tracking, incremental_filename)
+
+                # TODO: don't loop forever here
+
+                if time.time() > max_wait:
+                    LOGGER.debug("max wait")
+                    break
             else:
                 break
 
-        if len(fs) >= settings.s3_pool_size * 2:
-            # # this will keep RAM for going super high
-            # LOGGER.debug(
-            #     "backpressure",
-            #     extra={
-            #         "table": table_name,
-            #         "next_end_timestamp": next_end_timestamp,
-            #     },
-            # )
-            time.sleep(0.1)
+        # TODO: if fs is super long, what should we do?
 
         now = time.time()
-
         if now < next_end_timestamp:
-            LOGGER.info(
+            LOGGER.debug(
                 "Sleeping until the next incremental is ready",
                 extra={
                     "table": table_name,
@@ -202,7 +201,8 @@ def mark_completed(db_engine, parquet_import_tracking, filename):
     with db_engine.connect() as conn:
         conn.execute(stmt)
 
-    LOGGER.debug("completed", extra={"file": filename})
+    # this is too verbose
+    # LOGGER.debug("completed", extra={"file": filename})
 
 
 def download_and_import_incremental_parquet(

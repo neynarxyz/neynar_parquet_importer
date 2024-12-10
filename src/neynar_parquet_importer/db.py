@@ -207,9 +207,10 @@ def import_parquet(
 
         if is_empty:
             LOGGER.debug(
-                "Imported empty file with id %s: %s", tracking_id, local_filename
+                "imported empty file", extra={"id": tracking_id, "file": local_filename}
             )
-            # no need to continue on here. we can return early
+
+            # no need to continue on here. we can commit and return early
             empty_callback(1)
             conn.commit()
 
@@ -245,7 +246,7 @@ def import_parquet(
         primary_key_columns = table.primary_key.columns.values()
 
         # Read the data in batches
-        # TODO: parallelize the clean_parquet_data. the inserts still need to happen in order so that tracking doesn't get mixed up
+        # TODO: parallelize this. the import tracking needs to be done in order though!
         for i in range(start_row_group, num_row_groups):
             LOGGER.debug(
                 "Upsert #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
@@ -254,7 +255,10 @@ def import_parquet(
             # TODO: larger batches with `pf.iter_batches(batch_size=X)` instead of row groups
             batch = parquet_file.read_row_group(i)
 
+            # TODO: use batch.to_pylist() instead?
             data = batch.to_pydict()
+
+            # TODO: use Abstract Base Classes to make this easy to extend
 
             # collect into a different dict so that we can remove dupes
             # NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
@@ -289,6 +293,8 @@ def import_parquet(
                 where=(stmt.excluded["updated_at"] > table.c.updated_at),
             )
             conn.execute(upsert_stmt)
+
+            # TODO: benchmark this
             conn.commit()
 
             # update our database entry's last_row_group_imported
@@ -300,8 +306,6 @@ def import_parquet(
             conn.execute(update_tracking_stmt)
             conn.commit()
 
-            progress_callback(1)
-
             age_s = time() - parsed_filename["end_timestamp"]
 
             statsd.gauge("parquet_rows_import_age_s", age_s, tags=dd_tags)
@@ -310,6 +314,8 @@ def import_parquet(
                 value=len(batch),
                 tags=dd_tags,
             )
+
+            progress_callback(1)
 
         file_size = path.getsize(local_filename)
 
