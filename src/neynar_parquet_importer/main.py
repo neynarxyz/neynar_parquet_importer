@@ -15,14 +15,14 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from .app import PROGRESS_BYTES_LOCK, PROGRESS_CHUNKS_LOCK, ProgressCallback
+from .progress import ProgressCallback
 from .db import (
     check_for_existing_full_import,
     check_for_existing_incremental_import,
     import_parquet,
     init_db,
 )
-from .logging import setup_logging
+from .logger import setup_logging
 from .s3 import (
     download_incremental,
     download_latest_full,
@@ -61,11 +61,7 @@ ALL_TABLES = {
 def sync_parquet_to_db(
     db_engine,
     table_name,
-    full_bytes_downloaded_progress,
-    incremental_bytes_downloaded_progress,
-    full_steps_progress,
-    incremental_steps_progress,
-    empty_steps_progress,
+    progress_callbacks,
     settings: Settings,
 ):
     """Function that runs forever (barring exceptions) to download and import parquet files for a table.
@@ -93,8 +89,8 @@ def sync_parquet_to_db(
                 settings,
                 table_name,
                 last_start_timestamp,
-                incremental_bytes_downloaded_progress,
-                empty_steps_progress,
+                progress_callbacks["incremental_bytes"],
+                progress_callbacks["empty_steps"],
             )
 
         if incremental_filename:
@@ -103,8 +99,8 @@ def sync_parquet_to_db(
                 table_name,
                 incremental_filename,
                 "incremental",
-                incremental_steps_progress,
-                empty_steps_progress,
+                progress_callbacks["incremental_steps"],
+                progress_callbacks["empty_steps"],
                 settings,
             )
 
@@ -117,7 +113,7 @@ def sync_parquet_to_db(
         if full_filename is None or not os.path.exists(full_filename):
             # if no full export, download the latest one
             full_filename = download_latest_full(
-                s3_client, settings, table_name, full_bytes_downloaded_progress
+                s3_client, settings, table_name, progress_callbacks["full_bytes"]
             )
 
         import_parquet(
@@ -125,8 +121,8 @@ def sync_parquet_to_db(
             table_name,
             full_filename,
             "full",
-            full_steps_progress,
-            empty_steps_progress,
+            progress_callbacks["full_steps"],
+            progress_callbacks["empty_steps"],
             settings,
         )
 
@@ -150,8 +146,8 @@ def sync_parquet_to_db(
             settings,
             table_name,
             next_start_timestamp,
-            incremental_bytes_downloaded_progress,
-            empty_steps_progress,
+            progress_callbacks["incremental_bytes"],
+            progress_callbacks["empty_steps"],
         )
 
         if incremental_filename is None:
@@ -171,8 +167,8 @@ def sync_parquet_to_db(
             table_name,
             incremental_filename,
             "incremental",
-            incremental_steps_progress,
-            empty_steps_progress,
+            progress_callbacks["incremental_steps"],
+            progress_callbacks["empty_steps"],
             settings,
         )
 
@@ -223,32 +219,30 @@ def main(settings: Settings):
 
         # this only shows in a terminal. it does not show in docker logs
         # TODO: send a periodic log message to show progress in docker logs
-        stack.enter_context(Live(progress_table, refresh_per_second=10))
+        if settings.log_format != "json":
+            stack.enter_context(Live(progress_table, refresh_per_second=10))
+            enable_progress = True
+        else:
+            enable_progress = False
 
-        full_bytes_downloaded_id = bytes_progress.add_task("Full", total=0)
-        incremental_bytes_downloaded_id = bytes_progress.add_task(
-            "Incremental", total=0
-        )
-        full_steps_id = steps_progress.add_task("Full", total=0)
-        incremental_steps_id = steps_progress.add_task("Incremental", total=0)
-        empty_steps_id = steps_progress.add_task("Empty", total=0)
-
-        full_bytes_callback = ProgressCallback(
-            bytes_progress, full_bytes_downloaded_id, 0, PROGRESS_BYTES_LOCK
-        )
-        incremental_bytes_callback = ProgressCallback(
-            bytes_progress, incremental_bytes_downloaded_id, 0, PROGRESS_BYTES_LOCK
-        )
-
-        full_steps_callback = ProgressCallback(
-            steps_progress, full_steps_id, 0, PROGRESS_CHUNKS_LOCK
-        )
-        incremental_steps_callback = ProgressCallback(
-            steps_progress, incremental_steps_id, 0, PROGRESS_CHUNKS_LOCK
-        )
-        empty_steps_callback = ProgressCallback(
-            steps_progress, empty_steps_id, 0, PROGRESS_CHUNKS_LOCK
-        )
+        progress_callbacks = {
+            "full_bytes": ProgressCallback(
+                bytes_progress, "Full", 0, enabled=enable_progress
+            ),
+            "incremental_bytes": ProgressCallback(
+                bytes_progress, "Incremental", 0, enabled=enable_progress
+            ),
+            "full_steps": ProgressCallback(
+                steps_progress, "Full", 0, enabled=enable_progress
+            ),
+            "incremental_steps": ProgressCallback(
+                steps_progress, "Incremental", 0, enabled=enable_progress
+            ),
+            "empty_steps": ProgressCallback(
+                steps_progress, "Empty", 0, enabled=enable_progress
+            ),
+            # TODO: more progress here?
+        }
 
         # do all the tables in parallel
         table_executor = stack.enter_context(
@@ -260,11 +254,7 @@ def main(settings: Settings):
                 sync_parquet_to_db,
                 db_engine,
                 table_name,
-                full_bytes_callback,
-                incremental_bytes_callback,
-                full_steps_callback,
-                incremental_steps_callback,
-                empty_steps_callback,
+                progress_callbacks,
                 settings,
             ): table_name
             for table_name in tables

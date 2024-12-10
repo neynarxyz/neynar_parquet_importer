@@ -4,7 +4,7 @@ import boto3
 import botocore.exceptions
 from botocore.config import Config
 
-from .logging import LOGGER
+from .logger import LOGGER
 from .settings import Settings
 
 
