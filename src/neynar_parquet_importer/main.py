@@ -14,11 +14,13 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 from rich.table import Table
+from sqlalchemy import update
 
 from .progress import ProgressCallback
 from .db import (
     check_for_existing_full_import,
     check_for_existing_incremental_import,
+    get_table,
     import_parquet,
     init_db,
 )
@@ -60,6 +62,7 @@ ALL_TABLES = {
 
 def sync_parquet_to_db(
     db_engine,
+    file_executor,
     table_name,
     progress_callbacks,
     settings: Settings,
@@ -69,7 +72,7 @@ def sync_parquet_to_db(
     TODO: run downloads and imports in parallel to improve initial sync times
     """
     last_import_filename = None
-
+    parquet_import_tracking = get_table(db_engine, "parquet_import_tracking")
     s3_client = get_s3_client(settings)
 
     incremental_filename = check_for_existing_incremental_import(
@@ -77,6 +80,7 @@ def sync_parquet_to_db(
     )
     if incremental_filename:
         # if we have imported an incremental, then we should start there instead of at the full
+        # TODO: if this is very old, we might want to start with a full instead
         LOGGER.debug("Found existing incremental import %s", incremental_filename)
 
         if not os.path.exists(incremental_filename):
@@ -110,6 +114,8 @@ def sync_parquet_to_db(
         # no incrementals yet (or a very old one), start with the newest full file
         full_filename = check_for_existing_full_import(db_engine, settings, table_name)
 
+        # TODO: spawn this so we can check for incrementals while this is downloading
+        # TODO: need to be sure we handle "mark_completed" properly
         if full_filename is None or not os.path.exists(full_filename):
             # if no full export, download the latest one
             full_filename = download_latest_full(
@@ -131,16 +137,85 @@ def sync_parquet_to_db(
     next_start_timestamp = parse_parquet_filename(last_import_filename)["end_timestamp"]
     next_end_timestamp = next_start_timestamp + settings.incremental_duration
 
-    # TODO: subscribe to the SNS topic and read from it instead of polling
-
     # download all the incrementals. loops forever
+    fs = []
     while True:
+        while fs:
+            if fs[0].done():
+                f = fs.pop(0)
+
+                incremental_filename = f.result()
+
+                mark_completed(db_engine, parquet_import_tracking, incremental_filename)
+            else:
+                break
+
+        if len(fs) >= settings.s3_pool_size * 2:
+            # # this will keep RAM for going super high
+            # LOGGER.debug(
+            #     "backpressure",
+            #     extra={
+            #         "table": table_name,
+            #         "next_end_timestamp": next_end_timestamp,
+            #     },
+            # )
+            time.sleep(0.1)
+
         now = time.time()
 
         if now < next_end_timestamp:
-            LOGGER.info("Sleeping until the next incremental is ready")
+            LOGGER.info(
+                "Sleeping until the next incremental is ready",
+                extra={
+                    "table": table_name,
+                    "next_end_timestamp": next_end_timestamp,
+                    "now": now,
+                },
+            )
             time.sleep(next_end_timestamp - now)
 
+        # TODO: spawn a task on file_executor here
+        # TODO: have an executor for s3 and another for db?
+        # TODO: how should we handle gaps when we start? i think we need a thread that saves the next start row. have a channel of oneshots?
+        f = file_executor.submit(
+            download_and_import_incremental_parquet,
+            db_engine,
+            s3_client,
+            table_name,
+            next_start_timestamp,
+            progress_callbacks,
+            settings,
+        )
+        fs.append(f)
+
+        next_start_timestamp += settings.incremental_duration
+        next_end_timestamp += settings.incremental_duration
+
+
+def mark_completed(db_engine, parquet_import_tracking, filename):
+    stmt = (
+        update(parquet_import_tracking)
+        .where(parquet_import_tracking.c.file_name == filename)
+        .values(completed=True)
+    )
+
+    with db_engine.connect() as conn:
+        conn.execute(stmt)
+
+    LOGGER.debug("completed", extra={"file": filename})
+
+
+def download_and_import_incremental_parquet(
+    db_engine,
+    s3_client,
+    table_name,
+    next_start_timestamp,
+    progress_callbacks,
+    settings: Settings,
+):
+    incremental_filename = None
+
+    while incremental_filename is None:
         incremental_filename = download_incremental(
             s3_client,
             settings,
@@ -155,22 +230,19 @@ def sync_parquet_to_db(
                 "Next incremental for %s should be ready soon. Sleeping...", table_name
             )
             # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
-            # TODO: subtraact the time that it took to download the previous file
             time.sleep(settings.incremental_duration / 2.0)
-            continue
 
-        next_start_timestamp += settings.incremental_duration
-        next_end_timestamp += settings.incremental_duration
+    import_parquet(
+        db_engine,
+        table_name,
+        incremental_filename,
+        "incremental",
+        progress_callbacks["incremental_steps"],
+        progress_callbacks["empty_steps"],
+        settings,
+    )
 
-        import_parquet(
-            db_engine,
-            table_name,
-            incremental_filename,
-            "incremental",
-            progress_callbacks["incremental_steps"],
-            progress_callbacks["empty_steps"],
-            settings,
-        )
+    return incremental_filename
 
 
 def main(settings: Settings):
@@ -252,11 +324,15 @@ def main(settings: Settings):
         table_executor = stack.enter_context(
             ThreadPoolExecutor(max_workers=len(tables))
         )
+        file_executor = stack.enter_context(
+            ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
+        )
 
         table_fs = {
             table_executor.submit(
                 sync_parquet_to_db,
                 db_engine,
+                file_executor,
                 table_name,
                 progress_callbacks,
                 settings,

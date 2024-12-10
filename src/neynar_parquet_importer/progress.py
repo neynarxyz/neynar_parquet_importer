@@ -28,12 +28,13 @@ class ProgressCallback:
                 self.total_steps.value += more_steps
                 new_total = self.total_steps.value
 
-            # TODO: prettier name on this. need the progress name and the task_name saved. the task_id is just a number
-            LOGGER.debug(
-                "Growing task %s (%s) total to %s",
-                self.task_name,
-                self.task_id,
-                new_total,
-            )
+            # # TODO: this is too verbose
+            # LOGGER.debug(
+            #     "Growing task %s (%s) total to %s",
+            #     self.task_name,
+            #     self.task_id,
+            #     new_total,
+            # )
 
+            # TODO: i think theres still a race condition here, but it seems to work
             self.progress.update(self.task_id, total=new_total)

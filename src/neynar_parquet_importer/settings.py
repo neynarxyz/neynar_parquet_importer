@@ -34,16 +34,15 @@ class Settings(BaseSettings):
         self.setup_logging()
 
     def setup_datadog(self):
-        if self.datadog_enabled:
-            datadog.initialize(
-                hostname_from_config=False,
-                statsd_constant_tags=[
-                    f"target:{self.target_name}",
-                    f"npe_version:{self.npe_version}-{self.incremental_duration}",
-                    f"parquet_db:{self.parquet_s3_database}",
-                    f"parquet_schema:{self.parquet_s3_schema}",
-                ],
-            )
+        datadog.initialize(
+            hostname_from_config=False,
+            statsd_constant_tags=[
+                f"target:{self.target_name}",
+                f"npe_version:{self.npe_version}-{self.incremental_duration}",
+                f"parquet_db:{self.parquet_s3_database}",
+                f"parquet_schema:{self.parquet_s3_schema}",
+            ],
+        )
 
     def setup_logging(self):
         setup_logging(self.log_level, self.log_format)
@@ -54,7 +53,11 @@ class Settings(BaseSettings):
         logging.getLogger("boto3").setLevel(logging.INFO)
         logging.getLogger("botocore").setLevel(logging.INFO)
         logging.getLogger("urllib3").setLevel(logging.INFO)
-        logging.getLogger("datadog.dogstatsd").setLevel(logging.INFO)
+
+        if self.datadog_enabled:
+            logging.getLogger("datadog.dogstatsd").setLevel(logging.INFO)
+        else:
+            logging.getLogger("datadog.dogstatsd").setLevel(logging.CRITICAL)
 
     def parquet_s3_prefix(self):
         prefix = (

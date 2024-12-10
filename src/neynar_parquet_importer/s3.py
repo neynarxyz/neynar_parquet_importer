@@ -1,3 +1,4 @@
+from functools import lru_cache
 import os
 import re
 import boto3
@@ -160,4 +161,9 @@ def download_incremental(
 
 
 def get_s3_client(settings: Settings):
-    return boto3.client("s3", config=Config(max_pool_connections=settings.s3_pool_size))
+    return _get_s3_client(settings.s3_pool_size)
+
+
+@lru_cache(maxsize=1)
+def _get_s3_client(max_pool_connections):
+    return boto3.client("s3", config=Config(max_pool_connections=max_pool_connections))
