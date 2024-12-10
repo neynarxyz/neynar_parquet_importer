@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     s3_pool_size: int = 50
     target_name: str = "unknown"
 
-    def setup_datadog(self):
+    def __init__(self, **data):
+        super().__init__(**data)
+
         if self.datadog_enabled:
             datadog.initialize(
                 hostname_from_config=False,

@@ -13,8 +13,9 @@ class ProgressCallback:
     def __init__(self, progress, task_name, total_steps, enabled=True):
         self.enabled = enabled
         self.progress = progress
+        self.task_name = task_name
         self.task_id = progress.add_task(task_name, total=total_steps)
-        self.total_steps = Value("i", total_steps)
+        self.total_steps = Value("Q", total_steps)
 
     def __call__(self, advance):
         """This needs to be compatible with how boto does it's callbacks."""
@@ -28,6 +29,11 @@ class ProgressCallback:
                 new_total = self.total_steps.value
 
             # TODO: prettier name on this. need the progress name and the task_name saved. the task_id is just a number
-            LOGGER.debug("Growing task %s total to %s", self.task_id, new_total)
+            LOGGER.debug(
+                "Growing task %s (%s) total to %s",
+                self.task_name,
+                self.task_id,
+                new_total,
+            )
 
             self.progress.update(self.task_id, total=new_total)

@@ -288,10 +288,7 @@ if __name__ == "__main__":
 
     setup_logging(settings.log_level, settings.log_format)
 
-    settings.setup_datadog()
-
-    # TODO: env vars to control logging
-    logging.getLogger("app").setLevel(logging.INFO)
+    logging.getLogger("app").setLevel(settings.log_level)
     logging.getLogger("s3transfer").setLevel(logging.INFO)
     logging.getLogger("boto3").setLevel(logging.INFO)
     logging.getLogger("botocore").setLevel(logging.INFO)

@@ -55,10 +55,10 @@ def init_db(uri, parquet_tables, settings: Settings):
                 ):
                     pass
                 else:
-                    LOGGER.info("Skipping %s", filename)
+                    LOGGER.debug("Skipping %s", filename)
                     continue
             else:
-                LOGGER.info("Skipping %s", filename)
+                LOGGER.debug("Skipping %s", filename)
                 continue
 
             LOGGER.info("Applying %s", filename)
