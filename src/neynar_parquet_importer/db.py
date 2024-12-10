@@ -288,8 +288,8 @@ def import_parquet(
                 set_={col: stmt.excluded[col] for col in data.keys()},
                 where=(stmt.excluded["updated_at"] > table.c.updated_at),
             )
-
             conn.execute(upsert_stmt)
+            conn.commit()
 
             # update our database entry's last_row_group_imported
             update_tracking_stmt = (
@@ -298,8 +298,6 @@ def import_parquet(
                 .values(last_row_group_imported=i)
             )
             conn.execute(update_tracking_stmt)
-
-            # save the rows and the tracking update together
             conn.commit()
 
             progress_callback(1)
