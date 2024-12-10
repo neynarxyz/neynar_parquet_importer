@@ -1,9 +1,12 @@
 from functools import lru_cache
+import logging
 import datadog
 from pathlib import Path
 from typing import Optional
 from pydantic import Field, PostgresDsn
 from pydantic_settings import BaseSettings
+
+from neynar_parquet_importer.logger import setup_logging
 
 
 class Settings(BaseSettings):
@@ -26,9 +29,11 @@ class Settings(BaseSettings):
     s3_pool_size: int = 50
     target_name: str = "unknown"
 
-    def __init__(self, **data):
-        super().__init__(**data)
+    def initialize(self):
+        self.setup_datadog()
+        self.setup_logging()
 
+    def setup_datadog(self):
         if self.datadog_enabled:
             datadog.initialize(
                 hostname_from_config=False,
@@ -39,6 +44,17 @@ class Settings(BaseSettings):
                     f"parquet_schema:{self.parquet_s3_schema}",
                 ],
             )
+
+    def setup_logging(self):
+        setup_logging(self.log_level, self.log_format)
+
+        logging.getLogger("app").setLevel(self.log_level)
+
+        logging.getLogger("s3transfer").setLevel(logging.INFO)
+        logging.getLogger("boto3").setLevel(logging.INFO)
+        logging.getLogger("botocore").setLevel(logging.INFO)
+        logging.getLogger("urllib3").setLevel(logging.INFO)
+        logging.getLogger("datadog.dogstatsd").setLevel(logging.INFO)
 
     def parquet_s3_prefix(self):
         prefix = (

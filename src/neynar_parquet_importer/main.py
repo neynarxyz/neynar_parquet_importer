@@ -177,7 +177,7 @@ def main(settings: Settings):
     if settings.tables:
         tables = settings.tables.split(",")
     else:
-        tables = ALL_TABLES
+        tables = ALL_TABLES[(settings.parquet_s3_database, settings.parquet_s3_schema)]
 
     LOGGER.info("Tables: %s", ",".join(tables))
 
@@ -227,10 +227,14 @@ def main(settings: Settings):
 
         progress_callbacks = {
             "full_bytes": ProgressCallback(
-                bytes_progress, "Full", 0, enabled=enable_progress
+                bytes_progress, "Full", 0, enabled=enable_progress, value_type="Q"
             ),
             "incremental_bytes": ProgressCallback(
-                bytes_progress, "Incremental", 0, enabled=enable_progress
+                bytes_progress,
+                "Incremental",
+                0,
+                enabled=enable_progress,
+                value_type="Q",
             ),
             "full_steps": ProgressCallback(
                 steps_progress, "Full", 0, enabled=enable_progress
@@ -282,17 +286,11 @@ def main(settings: Settings):
 
 
 if __name__ == "__main__":
-    dotenv.load_dotenv()
+    dotenv.load_dotenv(os.getenv("ENV_FILE", ".env"))
 
     settings = Settings()
 
-    setup_logging(settings.log_level, settings.log_format)
-
-    logging.getLogger("app").setLevel(settings.log_level)
-    logging.getLogger("s3transfer").setLevel(logging.INFO)
-    logging.getLogger("boto3").setLevel(logging.INFO)
-    logging.getLogger("botocore").setLevel(logging.INFO)
-    logging.getLogger("urllib3").setLevel(logging.INFO)
+    settings.initialize()
 
     if settings.interactive_debug:
         with launch_ipdb_on_exception():

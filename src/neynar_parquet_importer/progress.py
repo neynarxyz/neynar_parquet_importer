@@ -10,12 +10,12 @@ from .logger import LOGGER
 class ProgressCallback:
     """Helper class for updating the progress bars in a thread-safe way."""
 
-    def __init__(self, progress, task_name, total_steps, enabled=True):
+    def __init__(self, progress, task_name, total_steps, enabled=True, value_type="I"):
         self.enabled = enabled
         self.progress = progress
         self.task_name = task_name
         self.task_id = progress.add_task(task_name, total=total_steps)
-        self.total_steps = Value("Q", total_steps)
+        self.total_steps = Value(value_type, total_steps)
 
     def __call__(self, advance):
         """This needs to be compatible with how boto does it's callbacks."""
