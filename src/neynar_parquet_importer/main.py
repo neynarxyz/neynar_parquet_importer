@@ -24,7 +24,6 @@ from .db import (
     import_parquet,
     init_db,
 )
-from .logger import setup_logging
 from .s3 import (
     download_incremental,
     download_latest_full,
@@ -232,15 +231,24 @@ def download_and_import_incremental_parquet(
             # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
             time.sleep(settings.incremental_duration / 2.0)
 
-    import_parquet(
-        db_engine,
-        table_name,
-        incremental_filename,
-        "incremental",
-        progress_callbacks["incremental_steps"],
-        progress_callbacks["empty_steps"],
-        settings,
-    )
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            import_parquet(
+                db_engine,
+                table_name,
+                incremental_filename,
+                "incremental",
+                progress_callbacks["incremental_steps"],
+                progress_callbacks["empty_steps"],
+                settings,
+            )
+            break  # Exit loop if successful
+        except Exception:
+            if attempt == max_retries:
+                raise
+            else:
+                LOGGER.exception(f"Attempt {attempt} failed")
 
     return incremental_filename
 
