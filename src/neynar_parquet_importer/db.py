@@ -25,7 +25,12 @@ JSON_COLUMNS = [
 
 def init_db(uri, parquet_tables, settings: Settings):
     """Initialize the database with our simple schema."""
-    engine = create_engine(uri, pool_size=settings.postgres_pool_size, max_overflow=2)
+    engine = create_engine(
+        uri,
+        pool_size=settings.postgres_pool_size,
+        isolation_level="AUTOCOMMIT",
+        pool_reset_on_return=None,
+    )
 
     LOGGER.info("migrating...")
     with engine.connect() as connection:
@@ -65,9 +70,6 @@ def init_db(uri, parquet_tables, settings: Settings):
 
             with open(filename, "r") as f:
                 connection.execute(text(f.read()))
-
-        # TODO: honestly not sure why i need this. i thought it would auto commit
-        connection.commit()
 
     LOGGER.info("migrations complete.")
 
@@ -212,7 +214,6 @@ def import_parquet(
 
             # no need to continue on here. we can commit and return early
             empty_callback(1)
-            conn.commit()
 
             age_s = time() - parsed_filename["end_timestamp"]
 
@@ -294,9 +295,6 @@ def import_parquet(
             )
             conn.execute(upsert_stmt)
 
-            # TODO: benchmark this
-            conn.commit()
-
             # update our database entry's last_row_group_imported
             update_tracking_stmt = (
                 tracking_table.update()
@@ -304,7 +302,6 @@ def import_parquet(
                 .values(last_row_group_imported=i)
             )
             conn.execute(update_tracking_stmt)
-            conn.commit()
 
             age_s = time() - parsed_filename["end_timestamp"]
 

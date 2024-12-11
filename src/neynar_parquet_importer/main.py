@@ -245,10 +245,9 @@ def download_and_import_incremental_parquet(
             )
             break  # Exit loop if successful
         except Exception:
+            LOGGER.exception(f"Attempt {attempt} failed")
             if attempt == max_retries:
                 raise
-            else:
-                LOGGER.exception(f"Attempt {attempt} failed")
 
     return incremental_filename
 
@@ -263,110 +262,119 @@ def main(settings: Settings):
 
     db_engine = init_db(str(settings.postgres_dsn), tables, settings)
 
-    target_dir = settings.target_dir()
-    if not target_dir.exists():
-        target_dir.mkdir(parents=True)
+    try:
+        target_dir = settings.target_dir()
+        if not target_dir.exists():
+            target_dir.mkdir(parents=True)
 
-    with ExitStack() as stack:
-        # these pretty progress bars show when you run the application in an interactive terminal
-        bytes_progress = Progress(
-            *Progress.get_default_columns(),
-            DownloadColumn(),
-            TransferSpeedColumn(),
-            refresh_per_second=10,
-        )
-        steps_progress = Progress(
-            *Progress.get_default_columns(),
-            MofNCompleteColumn(),
-            refresh_per_second=10,
-        )
+        with ExitStack() as stack:
+            # these pretty progress bars show when you run the application in an interactive terminal
+            bytes_progress = Progress(
+                *Progress.get_default_columns(),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                refresh_per_second=10,
+            )
+            steps_progress = Progress(
+                *Progress.get_default_columns(),
+                MofNCompleteColumn(),
+                refresh_per_second=10,
+            )
 
-        progress_table = Table.grid()
-        progress_table.add_row(
-            Panel.fit(
-                bytes_progress,
-                title="Bytes Downloaded",
-                border_style="green",
-                padding=(0, 0),
-            ),
-            Panel.fit(
-                steps_progress,
-                title="Steps Imported",
-                border_style="blue",
-                padding=(0, 0),
-            ),
-        )
+            progress_table = Table.grid()
+            progress_table.add_row(
+                Panel.fit(
+                    bytes_progress,
+                    title="Bytes Downloaded",
+                    border_style="green",
+                    padding=(0, 0),
+                ),
+                Panel.fit(
+                    steps_progress,
+                    title="Steps Imported",
+                    border_style="blue",
+                    padding=(0, 0),
+                ),
+            )
 
-        # this only shows in a terminal. it does not show in docker logs
-        # TODO: send a periodic log message to show progress in docker logs
-        if settings.log_format != "json":
-            stack.enter_context(Live(progress_table, refresh_per_second=10))
-            enable_progress = True
-        else:
-            enable_progress = False
+            # this only shows in a terminal. it does not show in docker logs
+            # TODO: send a periodic log message to show progress in docker logs
+            if settings.log_format != "json":
+                stack.enter_context(Live(progress_table, refresh_per_second=10))
+                enable_progress = True
+            else:
+                enable_progress = False
 
-        progress_callbacks = {
-            "full_bytes": ProgressCallback(
-                bytes_progress, "Full", 0, enabled=enable_progress, value_type="Q"
-            ),
-            "incremental_bytes": ProgressCallback(
-                bytes_progress,
-                "Incremental",
-                0,
-                enabled=enable_progress,
-                value_type="Q",
-            ),
-            "full_steps": ProgressCallback(
-                steps_progress, "Full", 0, enabled=enable_progress
-            ),
-            "incremental_steps": ProgressCallback(
-                steps_progress, "Incremental", 0, enabled=enable_progress
-            ),
-            "empty_steps": ProgressCallback(
-                steps_progress, "Empty", 0, enabled=enable_progress
-            ),
-            # TODO: more progress here?
-        }
+            progress_callbacks = {
+                "full_bytes": ProgressCallback(
+                    bytes_progress, "Full", 0, enabled=enable_progress, value_type="Q"
+                ),
+                "incremental_bytes": ProgressCallback(
+                    bytes_progress,
+                    "Incremental",
+                    0,
+                    enabled=enable_progress,
+                    value_type="Q",
+                ),
+                "full_steps": ProgressCallback(
+                    steps_progress, "Full", 0, enabled=enable_progress
+                ),
+                "incremental_steps": ProgressCallback(
+                    steps_progress, "Incremental", 0, enabled=enable_progress
+                ),
+                "empty_steps": ProgressCallback(
+                    steps_progress, "Empty", 0, enabled=enable_progress
+                ),
+                # TODO: more progress here?
+            }
 
-        # do all the tables in parallel
-        table_executor = stack.enter_context(
-            ThreadPoolExecutor(max_workers=len(tables))
-        )
-        file_executor = stack.enter_context(
-            ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
-        )
+            # do all the tables in parallel
+            table_executor = stack.enter_context(
+                ThreadPoolExecutor(max_workers=len(tables))
+            )
+            file_executor = stack.enter_context(
+                ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
+            )
 
-        table_fs = {
-            table_executor.submit(
-                sync_parquet_to_db,
-                db_engine,
-                file_executor,
-                table_name,
-                progress_callbacks,
-                settings,
-            ): table_name
-            for table_name in tables
-        }
+            table_fs = {
+                table_executor.submit(
+                    sync_parquet_to_db,
+                    db_engine,
+                    file_executor,
+                    table_name,
+                    progress_callbacks,
+                    settings,
+                ): table_name
+                for table_name in tables
+            }
 
-        # wait for importers to finish
-        # they will run forever, so this really only needs to handle exceptions
-        for future in as_completed(table_fs):
-            table_name = table_fs[future]
+            # wait for importers to finish
+            # they will run forever, so this really only needs to handle exceptions
+            for future in as_completed(table_fs):
+                table_name = table_fs[future]
 
-            LOGGER.warning("Table %s finished. This is unexpected", table_name)
+                LOGGER.warning("Table %s finished. This is unexpected", table_name)
 
-            # this will raise an excecption if `sync_parquet_to_db` failed
-            # the result should always be ready. no timeout is needed
-            try:
-                table_result = future.result()
+                # this will raise an excecption if `sync_parquet_to_db` failed
+                # the result should always be ready. no timeout is needed
+                try:
+                    table_result = future.result()
 
-                # TODO: do something with `table_result`?
-                table_result
-            except Exception:
-                LOGGER.exception("Table %s failed", table_name)
+                    # TODO: do something with `table_result`?
+                    table_result
+                except Exception:
+                    LOGGER.exception("Table %s failed", table_name)
 
-                # TODO: raise or break?
-                raise
+                    # TODO: raise or break?
+                    break
+
+            file_executor.shutdown(wait=False, cancel_futures=True)
+            table_executor.shutdown(wait=False, cancel_futures=True)
+
+            file_executor.shutdown(wait=True)
+            table_executor.shutdown(wait=True)
+    finally:
+        db_engine.dispose()
 
 
 if __name__ == "__main__":
