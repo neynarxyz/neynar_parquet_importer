@@ -139,9 +139,13 @@ def clean_parquet_data(col_name, value):
     return value
 
 
-@lru_cache(None)
+@lru_cache(maxsize=1)
+def get_metadata():
+    return MetaData()
+
+
 def get_table(engine, table_name):
-    metadata = MetaData()
+    metadata = get_metadata()
     return Table(table_name, metadata, autoload_with=engine)
 
 
@@ -203,134 +207,167 @@ def import_parquet(
         result = conn.execute(upsert_stmt)
         row = result.fetchone()
 
-        # Extract the id and last_row_group_imported
-        tracking_id = row.id
-        last_row_group_imported = row.last_row_group_imported
+    # Extract the id and last_row_group_imported
+    tracking_id = row.id
+    last_row_group_imported = row.last_row_group_imported
 
-        if is_empty:
-            LOGGER.debug(
-                "imported empty file", extra={"id": tracking_id, "file": local_filename}
-            )
-
-            # no need to continue on here. we can commit and return early
-            empty_callback(1)
-
-            age_s = time() - parsed_filename["end_timestamp"]
-
-            statsd.gauge("parquet_rows_age_s", age_s, tags=dd_tags)
-
-            return
-
-        if last_row_group_imported is None:
-            start_row_group = 0
-        else:
-            start_row_group = last_row_group_imported + 1
-
-        new_steps = num_row_groups - start_row_group
-
-        if new_steps == 0:
-            LOGGER.info("%s has already been imported", local_filename)
-            return
-
-        if last_row_group_imported is not None:
-            LOGGER.info("%s has resumed importing", local_filename)
-
-        # LOGGER.debug(
-        #     "%s more steps from %s",
-        #     f"{new_steps:_}",
-        #     table_name,
-        # )
-
-        # update the progress counter with our new step total
-        progress_callback.more_steps(new_steps)
-
-        primary_key_columns = table.primary_key.columns.values()
-
-        # Read the data in batches
-        # TODO: parallelize this. the import tracking needs to be done in order though!
-        for i in range(start_row_group, num_row_groups):
-            LOGGER.debug(
-                "Upsert #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
-            )
-
-            # TODO: larger batches with `pf.iter_batches(batch_size=X)` instead of row groups
-            batch = parquet_file.read_row_group(i)
-
-            # TODO: use batch.to_pylist() instead?
-            data = batch.to_pydict()
-
-            # TODO: use Abstract Base Classes to make this easy to extend
-
-            # collect into a different dict so that we can remove dupes
-            # NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
-            # TODO: have a helper function here that makes it easier to clean up the data
-            rows = {
-                tuple(
-                    clean_parquet_data(pk_col.name, data[pk_col.name][i])
-                    for pk_col in primary_key_columns
-                ): {
-                    col_name: clean_parquet_data(col_name, data[col_name][i])
-                    for col_name in data
-                }
-                for i in range(len(batch))
-            }
-
-            # discard the keys
-            rows = list(rows.values())
-
-            if len(batch) > len(rows):
-                LOGGER.debug(
-                    "Dropping %s rows with duplicate primary keys",
-                    len(batch) - len(rows),
-                )
-
-            # insert or update the rows
-            stmt = pg_insert(table).values(rows)
-
-            # TODO: only upsert where updated_at is newer than the existing row
-            upsert_stmt = stmt.on_conflict_do_update(
-                index_elements=primary_key_columns,
-                set_={col: stmt.excluded[col] for col in data.keys()},
-                where=(stmt.excluded["updated_at"] > table.c.updated_at),
-            )
-            conn.execute(upsert_stmt)
-
-            # update our database entry's last_row_group_imported
-            update_tracking_stmt = (
-                tracking_table.update()
-                .where(tracking_table.c.id == tracking_id)
-                .values(last_row_group_imported=i)
-            )
-            conn.execute(update_tracking_stmt)
-
-            age_s = time() - parsed_filename["end_timestamp"]
-
-            statsd.gauge("parquet_rows_import_age_s", age_s, tags=dd_tags)
-            statsd.increment(
-                "num_parquet_rows_imported",
-                value=len(batch),
-                tags=dd_tags,
-            )
-
-            progress_callback(1)
-
-        file_size = path.getsize(local_filename)
-
-        statsd.increment(
-            "parquet_bytes_imported",
-            value=file_size,
-            tags=dd_tags,
+    if is_empty:
+        LOGGER.debug(
+            "imported empty file", extra={"id": tracking_id, "file": local_filename}
         )
 
-        # TODO: datadog metrics instead?
-        LOGGER.info(
-            "finished import",
-            extra={
-                "age_s": age_s,
-                "table_name": table_name,
-                "file_name": local_filename,
-                "num_row_groups": num_row_groups,
-                "num_rows": parquet_file.metadata.num_rows,
-                "file_size": file_size,
-            },
+        # no need to continue on here. we can commit and return early
+        empty_callback(1)
+
+        age_s = time() - parsed_filename["end_timestamp"]
+
+        statsd.gauge("parquet_rows_age_s", age_s, tags=dd_tags)
+
+        return
+
+    if last_row_group_imported is None:
+        start_row_group = 0
+    else:
+        start_row_group = last_row_group_imported + 1
+
+    new_steps = num_row_groups - start_row_group
+
+    if new_steps == 0:
+        LOGGER.info("%s has already been imported", local_filename)
+        return
+
+    if last_row_group_imported is not None:
+        LOGGER.info("%s has resumed importing", local_filename)
+
+    # LOGGER.debug(
+    #     "%s more steps from %s",
+    #     f"{new_steps:_}",
+    #     table_name,
+    # )
+
+    # update the progress counter with our new step total
+    progress_callback.more_steps(new_steps)
+
+    primary_key_columns = table.primary_key.columns.values()
+
+    # Read the data in batches
+    # TODO: parallelize this. the import tracking needs to be done in order though!
+    for i in range(start_row_group, num_row_groups):
+        LOGGER.debug(
+            "Upsert #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
         )
+
+        # TODO: larger batches with `pf.iter_batches(batch_size=X)` instead of row groups
+        batch = parquet_file.read_row_group(i)
+
+        # TODO: put this in another worker pool
+        # TODO: use an abstract base class to make this easier to extend
+        process_batch(
+            i,
+            batch,
+            engine,
+            primary_key_columns,
+            table,
+            tracking_table,
+            tracking_id,
+            conn,
+            progress_callback,
+            parsed_filename,
+            dd_tags,
+        )
+
+    file_size = path.getsize(local_filename)
+
+    statsd.increment(
+        "parquet_bytes_imported",
+        value=file_size,
+        tags=dd_tags,
+    )
+
+    # TODO: datadog metrics instead?
+    LOGGER.info(
+        "finished import",
+        extra={
+            "age_s": age_s,
+            "table_name": table_name,
+            "file_name": local_filename,
+            "num_row_groups": num_row_groups,
+            "num_rows": parquet_file.metadata.num_rows,
+            "file_size": file_size,
+        },
+    )
+
+
+def process_batch(
+    i,
+    batch,
+    engine,
+    primary_key_columns,
+    table,
+    tracking_table,
+    tracking_id,
+    conn,
+    progress_callback,
+    parsed_filename,
+    dd_tags,
+):
+    # TODO: use batch.to_pylist() instead?
+    data = batch.to_pydict()
+
+    # TODO: use Abstract Base Classes to make this easy to extend
+
+    # collect into a different dict so that we can remove dupes
+    # NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
+    # TODO: have a helper function here that makes it easier to clean up the data
+    rows = {
+        tuple(
+            clean_parquet_data(pk_col.name, data[pk_col.name][i])
+            for pk_col in primary_key_columns
+        ): {
+            col_name: clean_parquet_data(col_name, data[col_name][i])
+            for col_name in data
+        }
+        for i in range(len(batch))
+    }
+
+    # discard the keys
+    rows = list(rows.values())
+
+    if len(batch) > len(rows):
+        LOGGER.debug(
+            "Dropping %s rows with duplicate primary keys",
+            len(batch) - len(rows),
+        )
+
+    # insert or update the rows
+    stmt = pg_insert(table).values(rows)
+
+    # TODO: only upsert where updated_at is newer than the existing row
+    upsert_stmt = stmt.on_conflict_do_update(
+        index_elements=primary_key_columns,
+        set_={col: stmt.excluded[col] for col in data.keys()},
+        where=(stmt.excluded["updated_at"] > table.c.updated_at),
+    )
+
+    with engine.connect() as conn:
+        conn.execute(upsert_stmt)
+
+        # update our database entry's last_row_group_imported
+        # TODO: move this outside this function so that we can do them in order while doing this function in parallel
+        update_tracking_stmt = (
+            tracking_table.update()
+            .where(tracking_table.c.id == tracking_id)
+            .values(last_row_group_imported=i)
+        )
+        conn.execute(update_tracking_stmt)
+
+    age_s = time() - parsed_filename["end_timestamp"]
+
+    statsd.gauge("parquet_rows_import_age_s", age_s, tags=dd_tags)
+    statsd.increment(
+        "num_parquet_rows_imported",
+        value=len(batch),
+        tags=dd_tags,
+    )
+
+    progress_callback(1)
