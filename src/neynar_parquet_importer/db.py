@@ -287,7 +287,7 @@ def import_parquet(
             LOGGER.debug("cancelled")
             return
 
-        i = f.result()
+        (i, age_s) = f.result()
 
         # update our database entry's last_row_group_imported
         # TODO: move this outside this function so that we can do them in order while doing this function in parallel
@@ -397,4 +397,4 @@ def process_batch(
 
     progress_callback(1)
 
-    return i
+    return (i, age_s)
