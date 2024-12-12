@@ -402,7 +402,6 @@ def process_batch(
 
     row_age_s = now - last_updated_at.timestamp()
 
-    # TODO: should this be > or <? i'm confused
     if file_age_s > row_age_s:
         LOGGER.warning(
             "bad row age!",
