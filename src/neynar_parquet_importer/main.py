@@ -1,6 +1,6 @@
 import logging
 import os
-import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
@@ -31,9 +31,10 @@ from .s3 import (
     get_s3_client,
     parse_parquet_filename,
 )
-from .settings import Settings
+from .settings import SHUTDOWN_EVENT, Settings
 
 LOGGER = logging.getLogger("app")
+
 
 # TODO: fetch this from env? tools to generate this list from the s3 bucket?
 # NOTE: "messages" is very large and so is not part of parquet exports
@@ -224,6 +225,8 @@ def download_and_import_incremental_parquet(
     incremental_filename = None
 
     while incremental_filename is None:
+        # TODO: check shutdown signal here?
+
         incremental_filename = download_incremental(
             s3_client,
             settings,
@@ -254,13 +257,17 @@ def download_and_import_incremental_parquet(
                 settings,
             )
             break  # Exit loop if successful
-        except Exception:
-            # TODO: make this less noisy during shutdown of the executor
-            LOGGER.exception(f"Attempt {attempt} failed")
-            if attempt == max_retries:
-                raise
         except KeyboardInterrupt:
             raise
+        except Exception as e:
+            if e.args == ("cannot schedule new futures after shutdown",):
+                LOGGER.debug("Executor shutdown")
+                break
+            else:
+                # TODO: make this less noisy during shutdown of the executor
+                LOGGER.exception(f"Attempt {attempt} failed")
+                if attempt == max_retries:
+                    raise
 
     return incremental_filename
 
@@ -348,17 +355,19 @@ def main(settings: Settings):
             file_executor = stack.enter_context(
                 ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
             )
-            # TODO: what size?
-            row_group_executor = stack.enter_context(
-                ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
-            )
+            row_group_executors = {
+                table_name: stack.enter_context(
+                    ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
+                )
+                for table_name in tables
+            }
 
             futures = {
                 table_executor.submit(
                     sync_parquet_to_db,
                     db_engine,
                     file_executor,
-                    row_group_executor,
+                    row_group_executors[table_name],
                     table_name,
                     progress_callbacks,
                     settings,
@@ -380,11 +389,19 @@ def main(settings: Settings):
 
                 # all these futures should run forever
                 # any completions are unexpected
-                sys.exit(1)
+                break
         except KeyboardInterrupt:
             LOGGER.info("interrupted")
-            sys.exit(1)
         finally:
+            LOGGER.info("shutting down")
+            SHUTDOWN_EVENT.set()
+
+            table_executor.shutdown(wait=False, cancel_futures=True)
+            file_executor.shutdown(wait=False, cancel_futures=True)
+            for executor in row_group_executors.values():
+                executor.shutdown(wait=False, cancel_futures=True)
+
+            LOGGER.debug("disposing db engine")
             db_engine.dispose()
 
 

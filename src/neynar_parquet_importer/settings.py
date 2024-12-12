@@ -1,4 +1,5 @@
 import logging
+import threading
 import datadog
 from pathlib import Path
 from typing import Optional
@@ -6,6 +7,8 @@ from pydantic import Field, PostgresDsn
 from pydantic_settings import BaseSettings
 
 from neynar_parquet_importer.logger import setup_logging
+
+SHUTDOWN_EVENT = threading.Event()
 
 
 class Settings(BaseSettings):

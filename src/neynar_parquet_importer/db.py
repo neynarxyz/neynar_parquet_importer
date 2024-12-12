@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .logger import LOGGER
 from .s3 import parse_parquet_filename
-from .settings import Settings
+from .settings import Settings, SHUTDOWN_EVENT
 
 # TODO: detect this from the table
 # arrays and json columns are stored as json in parquet because that was easier than dealing with the schema
@@ -136,6 +136,7 @@ def check_for_existing_full_import(engine, settings: Settings, table_name):
 def clean_parquet_data(col_name, value):
     if col_name in JSON_COLUMNS:
         return json.loads(value)
+    # TODO: if this is a datetime column, it is from parquet in milliseconds, not seconds!
     return value
 
 
@@ -209,16 +210,16 @@ def import_parquet(
     last_row_group_imported = row.last_row_group_imported
 
     if is_empty:
-        LOGGER.debug(
-            "imported empty file", extra={"id": tracking_id, "file": local_filename}
-        )
+        # LOGGER.debug(
+        #     "imported empty file", extra={"id": tracking_id, "file": local_filename}
+        # )
 
         # no need to continue on here. we can commit and return early
         empty_callback(1)
 
-        age_s = time() - parsed_filename["end_timestamp"]
+        file_age_s = time() - parsed_filename["end_timestamp"]
 
-        statsd.gauge("parquet_rows_age_s", age_s, tags=dd_tags)
+        statsd.gauge("parquet_file_age_s", file_age_s, tags=dd_tags)
 
         return
 
@@ -260,8 +261,6 @@ def import_parquet(
         #     table_name,
         # )
 
-        # TODO: put this in another worker pool
-        # TODO: use an abstract base class to make this easier to extend
         f = row_group_executor.submit(
             process_batch,
             parquet_file,
@@ -278,16 +277,24 @@ def import_parquet(
 
         # TODO: if fs is really long, wait? or maybe do update_tracking_stmt here, too?
 
-    LOGGER.debug("waiting for %s futures", len(fs))
+    # LOGGER.debug("waiting for %s futures", len(fs))
 
     # read them in order rather than with as_completed
     # TODO: this saves progress slower than i expected
-    for f in fs:
-        if f.cancelled():
-            LOGGER.debug("cancelled")
-            return
+    # TODO: drain this so that we don't hold a ton of memory
+    file_age_s = row_age_s = None
+    while fs:
+        if SHUTDOWN_EVENT.is_set():
+            row_group_executor.shutdown(cancel_futures=True, wait=False)
+            break
 
-        (i, age_s) = f.result()
+        try:
+            (i, file_age_s, row_age_s) = fs[0].result(timeout=2)
+        except TimeoutError:
+            # LOGGER.debug("TimeoutError")
+            continue
+
+        fs.pop(0)
 
         # update our database entry's last_row_group_imported
         # TODO: move this outside this function so that we can do them in order while doing this function in parallel
@@ -321,7 +328,8 @@ def import_parquet(
     LOGGER.info(
         "finished import",
         extra={
-            "age_s": age_s,
+            "file_age_s": file_age_s,
+            "row_age_s": row_age_s,
             "table_name": table_name,
             "file_name": local_filename,
             "num_row_groups": num_row_groups,
@@ -386,9 +394,28 @@ def process_batch(
     with engine.connect() as conn:
         conn.execute(upsert_stmt)
 
-    age_s = time() - parsed_filename["end_timestamp"]
+    now = time()
 
-    statsd.gauge("parquet_rows_import_age_s", age_s, tags=dd_tags)
+    file_age_s = now - parsed_filename["end_timestamp"]
+
+    last_updated_at = rows[-1]["updated_at"]
+
+    row_age_s = now - last_updated_at.timestamp()
+
+    # TODO: should this be > or <? i'm confused
+    if file_age_s > row_age_s:
+        LOGGER.warning(
+            "bad row age!",
+            extra={
+                "now": now,
+                "file_age_s": file_age_s,
+                "row_age_s": row_age_s,
+                "last_updated_at": last_updated_at.timestamp(),
+            },
+        )
+
+    statsd.gauge("parquet_file_age_s", file_age_s, tags=dd_tags)
+    statsd.gauge("parquet_row_age_s", row_age_s, tags=dd_tags)
     statsd.increment(
         "num_parquet_rows_imported",
         value=len(batch),
@@ -397,4 +424,4 @@ def process_batch(
 
     progress_callback(1)
 
-    return (i, age_s)
+    return (i, file_age_s, row_age_s)
