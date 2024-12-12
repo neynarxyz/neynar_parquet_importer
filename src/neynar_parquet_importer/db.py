@@ -30,6 +30,7 @@ def init_db(uri, parquet_tables, settings: Settings):
         pool_size=settings.postgres_pool_size,
         isolation_level="AUTOCOMMIT",
         pool_reset_on_return=None,
+        pool_timeout=120,
     )
 
     LOGGER.info("migrating...")

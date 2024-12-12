@@ -353,11 +353,11 @@ def main(settings: Settings):
                 ThreadPoolExecutor(max_workers=len(tables))
             )
             file_executor = stack.enter_context(
-                ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
+                ThreadPoolExecutor(max_workers=settings.postgres_pool_size)
             )
             row_group_executors = {
                 table_name: stack.enter_context(
-                    ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
+                    ThreadPoolExecutor(max_workers=settings.postgres_pool_size / 2)
                 )
                 for table_name in tables
             }

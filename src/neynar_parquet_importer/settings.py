@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     parquet_s3_database: str = "public-postgres"
     parquet_s3_schema: str = "farcaster"
     postgres_dsn: PostgresDsn = "postgresql+psycopg2://postgres:postgres@localhost:15432/example_neynar_parquet_importer"
-    postgres_pool_size: int = 50
+    postgres_pool_size: int = 100
     postgres_schema: Optional[str] = None
     s3_pool_size: int = 50
     target_name: str = "unknown"
