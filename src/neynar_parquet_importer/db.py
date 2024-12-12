@@ -140,12 +140,8 @@ def clean_parquet_data(col_name, value):
 
 
 @lru_cache(maxsize=1)
-def get_metadata():
-    return MetaData()
-
-
 def get_table(engine, table_name):
-    metadata = get_metadata()
+    metadata = MetaData()
     return Table(table_name, metadata, autoload_with=engine)
 
 
