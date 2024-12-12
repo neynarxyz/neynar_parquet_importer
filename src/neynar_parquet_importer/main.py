@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 import dotenv
 from ipdb import launch_ipdb_on_exception
@@ -62,6 +62,7 @@ ALL_TABLES = {
 def sync_parquet_to_db(
     db_engine,
     file_executor,
+    row_group_executor,
     table_name,
     progress_callbacks,
     settings: Settings,
@@ -104,6 +105,7 @@ def sync_parquet_to_db(
                 "incremental",
                 progress_callbacks["incremental_steps"],
                 progress_callbacks["empty_steps"],
+                row_group_executor,
                 settings,
             )
 
@@ -128,6 +130,7 @@ def sync_parquet_to_db(
             "full",
             progress_callbacks["full_steps"],
             progress_callbacks["empty_steps"],
+            row_group_executor,
             settings,
         )
 
@@ -153,8 +156,11 @@ def sync_parquet_to_db(
                 # TODO: don't loop forever here
 
                 if time.time() > max_wait:
-                    LOGGER.debug("max wait")
+                    # LOGGER.debug("max wait")
                     break
+            elif fs[0].cancelled():
+                LOGGER.debug("cancelled")
+                return
             else:
                 break
 
@@ -182,6 +188,7 @@ def sync_parquet_to_db(
             table_name,
             next_start_timestamp,
             progress_callbacks,
+            row_group_executor,
             settings,
         )
         fs.append(f)
@@ -210,6 +217,7 @@ def download_and_import_incremental_parquet(
     table_name,
     next_start_timestamp,
     progress_callbacks,
+    row_group_executor,
     settings: Settings,
 ):
     incremental_filename = None
@@ -231,7 +239,7 @@ def download_and_import_incremental_parquet(
             # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
             time.sleep(settings.incremental_duration / 2.0)
 
-    max_retries = 3
+    max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
             import_parquet(
@@ -241,6 +249,7 @@ def download_and_import_incremental_parquet(
                 "incremental",
                 progress_callbacks["incremental_steps"],
                 progress_callbacks["empty_steps"],
+                row_group_executor,
                 settings,
             )
             break  # Exit loop if successful
@@ -253,16 +262,20 @@ def download_and_import_incremental_parquet(
 
 
 def main(settings: Settings):
-    if settings.tables:
-        tables = settings.tables.split(",")
-    else:
-        tables = ALL_TABLES[(settings.parquet_s3_database, settings.parquet_s3_schema)]
-
-    LOGGER.info("Tables: %s", ",".join(tables))
-
-    db_engine = init_db(str(settings.postgres_dsn), tables, settings)
+    db_engine = None
 
     try:
+        if settings.tables:
+            tables = settings.tables.split(",")
+        else:
+            tables = ALL_TABLES[
+                (settings.parquet_s3_database, settings.parquet_s3_schema)
+            ]
+
+        LOGGER.info("Tables: %s", ",".join(tables))
+
+        db_engine = init_db(str(settings.postgres_dsn), tables, settings)
+
         target_dir = settings.target_dir()
         if not target_dir.exists():
             target_dir.mkdir(parents=True)
@@ -335,46 +348,28 @@ def main(settings: Settings):
             file_executor = stack.enter_context(
                 ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
             )
+            # TODO: what size?
+            row_group_executor = stack.enter_context(
+                ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
+            )
 
-            table_fs = {
+            {
                 table_executor.submit(
                     sync_parquet_to_db,
                     db_engine,
                     file_executor,
+                    row_group_executor,
                     table_name,
                     progress_callbacks,
                     settings,
                 ): table_name
                 for table_name in tables
             }
-
-            # wait for importers to finish
-            # they will run forever, so this really only needs to handle exceptions
-            for future in as_completed(table_fs):
-                table_name = table_fs[future]
-
-                LOGGER.warning("Table %s finished. This is unexpected", table_name)
-
-                # this will raise an excecption if `sync_parquet_to_db` failed
-                # the result should always be ready. no timeout is needed
-                try:
-                    table_result = future.result()
-
-                    # TODO: do something with `table_result`?
-                    table_result
-                except Exception:
-                    LOGGER.exception("Table %s failed", table_name)
-
-                    # TODO: raise or break?
-                    break
-
-            file_executor.shutdown(wait=False, cancel_futures=True)
-            table_executor.shutdown(wait=False, cancel_futures=True)
-
-            file_executor.shutdown(wait=True)
-            table_executor.shutdown(wait=True)
+    except KeyboardInterrupt:
+        LOGGER.info("interrupted")
     finally:
-        db_engine.dispose()
+        if db_engine is not None:
+            db_engine.dispose()
 
 
 if __name__ == "__main__":

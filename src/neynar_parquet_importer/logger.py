@@ -100,3 +100,6 @@ def setup_logging(level: str, log_format: str):
         level=level,
         handlers=[logHandler],
     )
+
+    # # TODO: make this configurable
+    # logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)

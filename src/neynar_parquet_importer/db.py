@@ -156,6 +156,7 @@ def import_parquet(
     file_type,
     progress_callback,
     empty_callback,
+    row_group_executor,
     settings: Settings,
 ):
     parsed_filename = parse_parquet_filename(local_filename)
