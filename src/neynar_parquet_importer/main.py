@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
@@ -375,17 +376,14 @@ def main(settings: Settings):
                 except Exception:
                     LOGGER.exception(f"{table_name} generated an exception")
                 else:
-                    LOGGER.info("%s completed. this is unexpected", table_name)
+                    LOGGER.warning("%s completed. this is unexpected", table_name)
 
                 # all these futures should run forever
                 # any completions are unexpected
-                break
+                sys.exit(1)
         except KeyboardInterrupt:
             LOGGER.info("interrupted")
-
-            table_executor.shutdown(wait=False, cancel_futures=True)
-            file_executor.shutdown(wait=False, cancel_futures=True)
-            row_group_executor.shutdown(wait=False, cancel_futures=True)
+            sys.exit(1)
         finally:
             db_engine.dispose()
 
