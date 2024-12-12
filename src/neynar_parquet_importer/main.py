@@ -1,7 +1,8 @@
 import logging
 import os
+import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 import dotenv
 from ipdb import launch_ipdb_on_exception
@@ -262,25 +263,21 @@ def download_and_import_incremental_parquet(
 
 
 def main(settings: Settings):
-    db_engine = None
+    if settings.tables:
+        tables = settings.tables.split(",")
+    else:
+        tables = ALL_TABLES[(settings.parquet_s3_database, settings.parquet_s3_schema)]
 
-    try:
-        if settings.tables:
-            tables = settings.tables.split(",")
-        else:
-            tables = ALL_TABLES[
-                (settings.parquet_s3_database, settings.parquet_s3_schema)
-            ]
+    LOGGER.info("Tables: %s", ",".join(tables))
 
-        LOGGER.info("Tables: %s", ",".join(tables))
+    db_engine = init_db(str(settings.postgres_dsn), tables, settings)
 
-        db_engine = init_db(str(settings.postgres_dsn), tables, settings)
+    target_dir = settings.target_dir()
+    if not target_dir.exists():
+        target_dir.mkdir(parents=True)
 
-        target_dir = settings.target_dir()
-        if not target_dir.exists():
-            target_dir.mkdir(parents=True)
-
-        with ExitStack() as stack:
+    with ExitStack() as stack:
+        try:
             # these pretty progress bars show when you run the application in an interactive terminal
             bytes_progress = Progress(
                 *Progress.get_default_columns(),
@@ -353,7 +350,7 @@ def main(settings: Settings):
                 ThreadPoolExecutor(max_workers=settings.postgres_pool_size - 1)
             )
 
-            {
+            futures = {
                 table_executor.submit(
                     sync_parquet_to_db,
                     db_engine,
@@ -365,10 +362,29 @@ def main(settings: Settings):
                 ): table_name
                 for table_name in tables
             }
-    except KeyboardInterrupt:
-        LOGGER.info("interrupted")
-    finally:
-        if db_engine is not None:
+
+            for f in as_completed(futures):
+                table_name = futures[f]
+                try:
+                    result = (
+                        f.result()
+                    )  # will raise an exception if the future ended with one
+                    result
+                except Exception:
+                    LOGGER.exception(f"{table_name} generated an exception")
+                else:
+                    LOGGER.info("%s completed. this is unexpected", table_name)
+
+                # all these futures should run forever
+                # any completions are unexpected
+                break
+        except KeyboardInterrupt:
+            LOGGER.info("interrupted")
+
+            table_executor.shutdown(wait=False, cancel_futures=True)
+            file_executor.shutdown(wait=False, cancel_futures=True)
+            row_group_executor.shutdown(wait=False, cancel_futures=True)
+        finally:
             db_engine.dispose()
 
 

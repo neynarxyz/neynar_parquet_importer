@@ -33,10 +33,10 @@ def init_db(uri, parquet_tables, settings: Settings):
     )
 
     LOGGER.info("migrating...")
-    with engine.connect() as connection:
+    with engine.connect() as conn:
         # set the schema if we have one configured. otherwise everything goes into "public"
         if settings.postgres_schema:
-            connection.execute(
+            conn.execute(
                 "SET search_path TO :schema_name",
                 {"schema_name": settings.postgres_schema},
             )
@@ -69,7 +69,7 @@ def init_db(uri, parquet_tables, settings: Settings):
             LOGGER.info("Applying %s", filename)
 
             with open(filename, "r") as f:
-                connection.execute(text(f.read()))
+                conn.execute(text(f.read()))
 
     LOGGER.info("migrations complete.")
 
@@ -180,30 +180,30 @@ def import_parquet(
         parquet_file = pq.ParquetFile(local_filename)
         num_row_groups = parquet_file.num_row_groups
 
+    # Do NOT put 0 here. That would mean that we already imported row group 0!
+    last_row_group_imported = None
+
+    # Prepare the insert statement
+    stmt = pg_insert(tracking_table).values(
+        table_name=table_name,
+        file_name=local_filename,
+        file_type=file_type,
+        file_version=settings.npe_version,
+        file_duration_s=settings.incremental_duration,
+        is_empty=is_empty,
+        last_row_group_imported=last_row_group_imported,
+        total_row_groups=num_row_groups,
+    )
+
+    upsert_stmt = stmt.on_conflict_do_update(
+        index_elements=["file_name"],  # Use the unique constraint columns
+        set_={
+            # No actual data changes; this is a no-op update
+            "last_row_group_imported": tracking_table.c.last_row_group_imported,
+        },
+    ).returning(tracking_table.c.id, tracking_table.c.last_row_group_imported)
+
     with engine.connect() as conn:
-        # Do NOT put 0 here. That would mean that we already imported row group 0!
-        last_row_group_imported = None
-
-        # Prepare the insert statement
-        stmt = pg_insert(tracking_table).values(
-            table_name=table_name,
-            file_name=local_filename,
-            file_type=file_type,
-            file_version=settings.npe_version,
-            file_duration_s=settings.incremental_duration,
-            is_empty=is_empty,
-            last_row_group_imported=last_row_group_imported,
-            total_row_groups=num_row_groups,
-        )
-
-        upsert_stmt = stmt.on_conflict_do_update(
-            index_elements=["file_name"],  # Use the unique constraint columns
-            set_={
-                # No actual data changes; this is a no-op update
-                "last_row_group_imported": tracking_table.c.last_row_group_imported,
-            },
-        ).returning(tracking_table.c.id, tracking_table.c.last_row_group_imported)
-
         # Execute the statement and fetch the result
         result = conn.execute(upsert_stmt)
         row = result.fetchone()
@@ -253,28 +253,64 @@ def import_parquet(
 
     # Read the data in batches
     # TODO: parallelize this. the import tracking needs to be done in order though!
+    fs = []
     for i in range(start_row_group, num_row_groups):
-        LOGGER.debug(
-            "Upsert #%s/%s for %s", f"{i+1:_}", f"{num_row_groups:_}", table_name
-        )
-
         # TODO: larger batches with `pf.iter_batches(batch_size=X)` instead of row groups
-        batch = parquet_file.read_row_group(i)
+
+        # LOGGER.debug(
+        #     "Queueing upsert #%s/%s for %s",
+        #     f"{i+1:_}",
+        #     f"{num_row_groups:_}",
+        #     table_name,
+        # )
 
         # TODO: put this in another worker pool
         # TODO: use an abstract base class to make this easier to extend
-        process_batch(
+        f = row_group_executor.submit(
+            process_batch,
+            parquet_file,
             i,
-            batch,
             engine,
             primary_key_columns,
             table,
-            tracking_table,
-            tracking_id,
-            conn,
             progress_callback,
             parsed_filename,
             dd_tags,
+        )
+
+        fs.append(f)
+
+        # TODO: if fs is really long, wait? or maybe do update_tracking_stmt here, too?
+
+    LOGGER.debug("waiting for %s futures", len(fs))
+
+    # read them in order rather than with as_completed
+    # TODO: this saves progress slower than i expected
+    for f in fs:
+        if f.cancelled():
+            LOGGER.debug("cancelled")
+            return
+
+        i = f.result()
+
+        # update our database entry's last_row_group_imported
+        # TODO: move this outside this function so that we can do them in order while doing this function in parallel
+        update_tracking_stmt = (
+            tracking_table.update()
+            .where(tracking_table.c.id == tracking_id)
+            .values(last_row_group_imported=i)
+        )
+
+        # TODO: connect inside or outside the loop?
+        with engine.connect() as conn:
+            conn.execute(update_tracking_stmt)
+
+        # TODO: metric here?
+        LOGGER.debug(
+            "Completed upsert #%s/%s for %s",
+            f"{i+1:_}",
+            f"{num_row_groups:_}",
+            table_name,
         )
 
     file_size = path.getsize(local_filename)
@@ -300,18 +336,19 @@ def import_parquet(
 
 
 def process_batch(
+    parquet_file,
     i,
-    batch,
     engine,
     primary_key_columns,
     table,
-    tracking_table,
-    tracking_id,
-    conn,
     progress_callback,
     parsed_filename,
     dd_tags,
 ):
+    # LOGGER.debug("starting batch #%s", i)
+
+    batch = parquet_file.read_row_group(i)
+
     # TODO: use batch.to_pylist() instead?
     data = batch.to_pydict()
 
@@ -353,15 +390,6 @@ def process_batch(
     with engine.connect() as conn:
         conn.execute(upsert_stmt)
 
-        # update our database entry's last_row_group_imported
-        # TODO: move this outside this function so that we can do them in order while doing this function in parallel
-        update_tracking_stmt = (
-            tracking_table.update()
-            .where(tracking_table.c.id == tracking_id)
-            .values(last_row_group_imported=i)
-        )
-        conn.execute(update_tracking_stmt)
-
     age_s = time() - parsed_filename["end_timestamp"]
 
     statsd.gauge("parquet_rows_import_age_s", age_s, tags=dd_tags)
@@ -372,3 +400,5 @@ def process_batch(
     )
 
     progress_callback(1)
+
+    return i
