@@ -240,7 +240,7 @@ def download_and_import_incremental_parquet(
             # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
             time.sleep(settings.incremental_duration / 2.0)
 
-    max_retries = 5
+    max_retries = 3
     for attempt in range(1, max_retries + 1):
         try:
             import_parquet(
@@ -255,9 +255,12 @@ def download_and_import_incremental_parquet(
             )
             break  # Exit loop if successful
         except Exception:
+            # TODO: make this less noisy during shutdown of the executor
             LOGGER.exception(f"Attempt {attempt} failed")
             if attempt == max_retries:
                 raise
+        except KeyboardInterrupt:
+            raise
 
     return incremental_filename
 
