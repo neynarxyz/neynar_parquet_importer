@@ -108,7 +108,18 @@ def check_for_existing_incremental_import(engine, settings: Settings, table_name
     if result is None:
         return None
 
-    return result[0]
+    latest_filename = result[0]
+
+    parsed_filename = parse_parquet_filename(latest_filename)
+
+    if parsed_filename["end_timestamp"] <= maximum_parquet_age():
+        LOGGER.warning(
+            "Skipping incremental file because it is too old",
+            extra={"file": latest_filename},
+        )
+        return None
+
+    return latest_filename
 
 
 def check_for_existing_full_import(engine, settings: Settings, table_name):
@@ -136,7 +147,18 @@ def check_for_existing_full_import(engine, settings: Settings, table_name):
     if result is None:
         return None
 
-    return result[0]
+    latest_filename = result[0]
+
+    parsed_filename = parse_parquet_filename(latest_filename)
+
+    if parsed_filename["end_timestamp"] <= maximum_parquet_age():
+        LOGGER.warning(
+            "Skipping full file because it is too old",
+            extra={"file": latest_filename},
+        )
+        return None
+
+    return latest_filename
 
 
 def clean_parquet_data(col_name, value):
@@ -343,6 +365,11 @@ def import_parquet(
             "file_size": file_size,
         },
     )
+
+
+def maximum_parquet_age():
+    """Only 2 weeks of files are kept in s3"""
+    return time() - 60 * 60 * 24 * 7 * 2
 
 
 def process_batch(
