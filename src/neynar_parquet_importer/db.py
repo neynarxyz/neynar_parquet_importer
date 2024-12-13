@@ -30,7 +30,8 @@ def init_db(uri, parquet_tables, settings: Settings):
         pool_size=settings.postgres_pool_size,
         isolation_level="AUTOCOMMIT",
         pool_reset_on_return=None,
-        pool_timeout=45,
+        pool_timeout=30,
+        pool_pre_ping=True,  # TODO: benchmark this. i see too many errors about connections being closed by the server
     )
 
     LOGGER.info("migrating...")
