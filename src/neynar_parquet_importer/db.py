@@ -31,7 +31,7 @@ def init_db(uri, parquet_tables, settings: Settings):
         isolation_level="AUTOCOMMIT",
         pool_reset_on_return=None,
         pool_timeout=30,
-        pool_pre_ping=True,  # TODO: benchmark this. i see too many errors about connections being closed by the server
+        # pool_pre_ping=True,  # TODO: benchmark this. i see too many errors about connections being closed by the server
     )
 
     LOGGER.info("migrating...")
@@ -338,12 +338,13 @@ def import_parquet(
             conn.execute(update_tracking_stmt)
 
         # TODO: metric here?
-        LOGGER.debug(
-            "Completed upsert #%s/%s for %s",
-            f"{i+1:_}",
-            f"{num_row_groups:_}",
-            table_name,
-        )
+        if num_row_groups > 1:
+            LOGGER.debug(
+                "Completed upsert #%s/%s for %s",
+                f"{i+1:_}",
+                f"{num_row_groups:_}",
+                table_name,
+            )
 
     file_size = path.getsize(local_filename)
 
