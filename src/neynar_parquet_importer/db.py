@@ -34,43 +34,48 @@ def init_db(uri, parquet_tables, settings: Settings):
     )
 
     LOGGER.info("migrating...")
-    with engine.connect() as conn:
-        # set the schema if we have one configured. otherwise everything goes into "public"
-        if settings.postgres_schema:
-            conn.execute(
-                "SET search_path TO :schema_name",
-                {"schema_name": settings.postgres_schema},
-            )
 
-        pattern = r"schema/(?P<num>\d{3})_(?P<parquet_db_name>[a-zA-Z0-9-]+)_(?P<parquet_schema_name>[a-zA-Z0-9-]+)_(?P<parquet_table_name>[a-zA-Z0-9_]+)\.sql"
+    pattern = r"schema/(?P<num>\d{3})_(?P<parquet_db_name>[a-zA-Z0-9-]+)_(?P<parquet_schema_name>[a-zA-Z0-9-]+)_(?P<parquet_table_name>[a-zA-Z0-9_]+)\.sql"
 
-        for filename in sorted(glob.glob("schema/*.sql")):
-            m = re.match(pattern, filename)
+    for filename in sorted(glob.glob("schema/*.sql")):
+        m = re.match(pattern, filename)
 
-            if m:
-                parts = m.groupdict()
+        if m:
+            parts = m.groupdict()
 
-                LOGGER.debug(parts)
+            LOGGER.debug(parts)
 
-                if parts["parquet_db_name"] == "all":
-                    pass
-                elif (
-                    parts["parquet_db_name"] == settings.parquet_s3_database
-                    and parts["parquet_schema_name"] == settings.parquet_s3_schema
-                    and parts["parquet_table_name"] in parquet_tables
-                ):
-                    pass
-                else:
-                    LOGGER.debug("Skipping %s", filename)
-                    continue
+            if parts["parquet_db_name"] == "all":
+                pass
+            elif (
+                parts["parquet_db_name"] == settings.parquet_s3_database
+                and parts["parquet_schema_name"] == settings.parquet_s3_schema
+                and parts["parquet_table_name"] in parquet_tables
+            ):
+                pass
             else:
                 LOGGER.debug("Skipping %s", filename)
                 continue
+        else:
+            LOGGER.debug("Skipping %s", filename)
+            continue
 
-            LOGGER.info("Applying %s", filename)
+        LOGGER.info("Applying %s", filename)
 
-            with open(filename, "r") as f:
-                conn.execute(text(f.read()))
+        with open(filename, "r") as f:
+            migration = text(f.read())
+
+            with engine.connect().execution_options(
+                isolation_level="READ COMMITTED"
+            ) as conn:
+                # set the schema if we have one configured. otherwise everything goes into "public"
+                # TODO: i don't love this. theres probably a much better way to set set the search path. i don't think this even works with autocommit either
+                if settings.postgres_schema:
+                    conn.execute(
+                        "SET search_path TO :schema_name",
+                        {"schema_name": settings.postgres_schema},
+                    )
+                conn.execute(migration)
 
     LOGGER.info("migrations complete.")
 
