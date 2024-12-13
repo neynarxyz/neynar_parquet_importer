@@ -357,7 +357,9 @@ def main(settings: Settings):
             )
             row_group_executors = {
                 table_name: stack.enter_context(
-                    ThreadPoolExecutor(max_workers=settings.postgres_pool_size / 2)
+                    ThreadPoolExecutor(
+                        max_workers=min(2, settings.postgres_pool_size // 2)
+                    )
                 )
                 for table_name in tables
             }
