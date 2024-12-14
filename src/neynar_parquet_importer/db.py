@@ -349,9 +349,9 @@ def import_parquet(
                 },
             )
 
-        # TODO: think about this more
-        if fs:
-            sleep(1)
+        # # TODO: think about this more
+        # if fs:
+        #     sleep(1)
 
     file_size = path.getsize(local_filename)
 

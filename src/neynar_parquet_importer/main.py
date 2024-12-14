@@ -155,8 +155,7 @@ def sync_parquet_to_db(
 
                 mark_completed(db_engine, parquet_import_tracking, incremental_filename)
 
-                # TODO: don't loop forever here
-
+                # TODO: think about this more
                 if time.time() > max_wait:
                     # LOGGER.debug("max wait")
                     break
