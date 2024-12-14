@@ -235,6 +235,10 @@ def download_and_import_incremental_parquet(
         )
 
         if incremental_filename is None:
+            if SHUTDOWN_EVENT.is_set():
+                LOGGER.debug("Shutting down")
+                return
+
             LOGGER.debug(
                 "Next incremental for %s should be ready soon. Sleeping...", table_name
             )
