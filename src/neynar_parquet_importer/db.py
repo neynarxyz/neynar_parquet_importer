@@ -418,10 +418,7 @@ def process_batch(
     # NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
     # TODO: have a helper function here that makes it easier to clean up the data
     rows = {
-        tuple(
-            clean_parquet_data(pk_col.name, data[pk_col.name][i])
-            for pk_col in primary_key_columns
-        ): {
+        tuple(data[pk_col.name][i] for pk_col in primary_key_columns): {
             col_name: clean_parquet_data(col_name, data[col_name][i])
             for col_name in data
         }
