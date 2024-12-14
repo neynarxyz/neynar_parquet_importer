@@ -4,7 +4,7 @@ import glob
 import json
 from os import path
 import re
-from time import time
+from time import sleep, time
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -322,12 +322,13 @@ def import_parquet(
         (i, file_age_s, row_age_s, last_updated_at) = f.result()
 
         # no need to call update for every entry if a bunch are done. skip to the last finished one
-        while fs:
-            if fs[0].done():
-                f = fs.pop(0)
-                (i, file_age_s, row_age_s, last_updated_at) = f.result()
-            else:
-                break
+        if fs:
+            while fs:
+                if fs[0].done():
+                    f = fs.pop(0)
+                else:
+                    break
+            (i, file_age_s, row_age_s, last_updated_at) = f.result()
 
         # TODO: connect inside or outside the loop?
         with engine.connect() as conn:
@@ -347,6 +348,10 @@ def import_parquet(
                 "last_updated_at": last_updated_at.timestamp(),
             },
         )
+
+        # TODO: think about this more
+        if fs:
+            sleep(1)
 
     file_size = path.getsize(local_filename)
 
