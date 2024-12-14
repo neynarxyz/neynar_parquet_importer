@@ -354,10 +354,14 @@ def main(settings: Settings):
                 ThreadPoolExecutor(max_workers=len(tables))
             )
             file_executor = stack.enter_context(
-                ThreadPoolExecutor(max_workers=settings.postgres_pool_size)
+                ThreadPoolExecutor(max_workers=settings.s3_pool_size)
             )
+
+            row_workers = max(3, (settings.postgres_pool_size - 1) // len(tables))
             row_group_executors = {
-                table_name: stack.enter_context(ThreadPoolExecutor(max_workers=3))
+                table_name: stack.enter_context(
+                    ThreadPoolExecutor(max_workers=row_workers)
+                )
                 for table_name in tables
             }
 
@@ -398,7 +402,7 @@ def main(settings: Settings):
             table_executor.shutdown(wait=False, cancel_futures=True)
             file_executor.shutdown(wait=False, cancel_futures=True)
             for executor in row_group_executors.values():
-                executor.shutdown(wait=False, cancel_futures=True)
+                executor.shutdown(wait=True, cancel_futures=True)
 
             LOGGER.debug("disposing db engine")
             db_engine.dispose()
