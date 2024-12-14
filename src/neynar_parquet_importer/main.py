@@ -177,7 +177,7 @@ def sync_parquet_to_db(
                     "next_end": next_end_timestamp,
                 },
             )
-            time.sleep(next_end_timestamp - now)
+            time.sleep(next_end_timestamp - now + 0.5)
 
         # TODO: spawn a task on file_executor here
         # TODO: have an executor for s3 and another for db?
@@ -357,7 +357,8 @@ def main(settings: Settings):
                 ThreadPoolExecutor(max_workers=settings.s3_pool_size)
             )
 
-            row_workers = max(3, (settings.postgres_pool_size - 1) // len(tables))
+            row_workers = max(3, (settings.postgres_pool_size) // len(tables))
+            LOGGER.info("Row workers: %s", row_workers)
             row_group_executors = {
                 table_name: stack.enter_context(
                     ThreadPoolExecutor(max_workers=row_workers)

@@ -319,8 +319,15 @@ def import_parquet(
     i = file_age_s = row_age_s = None
     while fs:
         f = fs.pop(0)
+        (i, file_age_s, row_age_s, last_updated_at) = f.result()
 
-        (i, file_age_s, row_age_s) = f.result()
+        # no need to call update for every entry if a bunch are done. skip to the last finished one
+        while fs:
+            if fs[0].done():
+                f = fs.pop(0)
+                (i, file_age_s, row_age_s, last_updated_at) = f.result()
+            else:
+                break
 
         # TODO: connect inside or outside the loop?
         with engine.connect() as conn:
@@ -337,6 +344,7 @@ def import_parquet(
             extra={
                 "file_age_s": file_age_s,
                 "row_age_s": row_age_s,
+                "last_updated_at": last_updated_at.timestamp(),
             },
         )
 
@@ -399,10 +407,12 @@ def process_batch(
 
     rows = batch.to_pylist()  # Direct conversion to Python-native types for sqlalchemy
 
+    row_keys = rows[0].keys()
+
     # TODO: i don't love this
     # TODO: we used to have code here that would remove duplicate ids, but I don't think that's necessary anymore
     for row in rows:
-        for col_name in row.keys():
+        for col_name in row_keys:
             row[col_name] = clean_parquet_data(col_name, row[col_name])
 
     # TODO: use Abstract Base Classes to make this easy to extend
@@ -415,7 +425,7 @@ def process_batch(
     # only upsert where updated_at is newer than the existing row
     upsert_stmt = stmt.on_conflict_do_update(
         index_elements=primary_key_columns,
-        set_={col: stmt.excluded[col] for col in rows[0].keys()},
+        set_={col: stmt.excluded[col] for col in row_keys},
         where=(stmt.excluded["updated_at"] > table.c.updated_at),
     )
 
@@ -452,4 +462,4 @@ def process_batch(
 
     progress_callback(1)
 
-    return (i, file_age_s, row_age_s)
+    return (i, file_age_s, row_age_s, last_updated_at)
