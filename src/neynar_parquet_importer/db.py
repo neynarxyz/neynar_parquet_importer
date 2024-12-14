@@ -345,6 +345,10 @@ def import_parquet(
                 f"{i+1:_}",
                 f"{num_row_groups:_}",
                 table_name,
+                extra={
+                    "file_age_s": file_age_s,
+                    "row_age_s": row_age_s,
+                },
             )
 
     file_size = path.getsize(local_filename)

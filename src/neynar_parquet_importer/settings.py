@@ -1,5 +1,7 @@
 import logging
+import os
 import threading
+import time
 import datadog
 from pathlib import Path
 from typing import Optional
@@ -32,6 +34,10 @@ class Settings(BaseSettings):
     target_name: str = "unknown"
 
     def initialize(self):
+        # TODO: i don't love this, but somewhere in the code is turning naive datetimes into the local timezone instead of UTC
+        os.environ["TZ"] = "UTC"
+        time.tzset()
+
         self.setup_datadog()
         self.setup_logging()
 
