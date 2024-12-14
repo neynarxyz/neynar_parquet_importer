@@ -145,25 +145,21 @@ def sync_parquet_to_db(
     fs = []
     while True:
         # mark files completed in order. this keeps us from skipping items if we have to restart
-        # TODO: i don't love this, but it seems to work okay
-        max_wait = time.time() + 0.1
+        completed_filenames = []
         while fs:
             if fs[0].done():
                 f = fs.pop(0)
 
                 incremental_filename = f.result()
 
-                mark_completed(db_engine, parquet_import_tracking, incremental_filename)
-
-                # TODO: think about this more
-                if time.time() > max_wait:
-                    # LOGGER.debug("max wait")
-                    break
+                completed_filenames.append(incremental_filename)
             elif fs[0].cancelled():
                 LOGGER.debug("cancelled")
                 return
             else:
                 break
+
+        mark_completed(db_engine, parquet_import_tracking, completed_filenames)
 
         # TODO: if fs is super long, what should we do?
 
@@ -176,7 +172,7 @@ def sync_parquet_to_db(
                     "next_end": next_end_timestamp,
                 },
             )
-            time.sleep(next_end_timestamp - now + 0.5)
+            time.sleep(next_end_timestamp - now)
 
         # TODO: spawn a task on file_executor here
         # TODO: have an executor for s3 and another for db?
@@ -197,10 +193,13 @@ def sync_parquet_to_db(
         next_end_timestamp += settings.incremental_duration
 
 
-def mark_completed(db_engine, parquet_import_tracking, filename):
+def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
+    if not completed_filenames:
+        return
+
     stmt = (
         update(parquet_import_tracking)
-        .where(parquet_import_tracking.c.file_name == filename)
+        .where(parquet_import_tracking.c.file_name.in_(completed_filenames))
         .values(completed=True)
     )
 
@@ -209,7 +208,7 @@ def mark_completed(db_engine, parquet_import_tracking, filename):
         conn.commit()
 
     # this is too verbose
-    # LOGGER.debug("completed", extra={"file": filename})
+    # LOGGER.debug("completed", extra={"files": completed_filenames})
 
 
 def download_and_import_incremental_parquet(

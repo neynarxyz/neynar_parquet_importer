@@ -355,6 +355,7 @@ def import_parquet(
 
     file_size = path.getsize(local_filename)
 
+    # TODO: i'd like to emit this metric in the process_batch function, but I'm not sure how to get the size of the batch
     statsd.increment(
         "parquet_bytes_imported",
         value=file_size,
