@@ -31,7 +31,8 @@ def init_db(uri, parquet_tables, settings: Settings):
         isolation_level="AUTOCOMMIT",
         pool_reset_on_return=None,
         pool_timeout=30,
-        pool_pre_ping=True,  # TODO: benchmark this. i see too many errors about connections being closed by the server
+        # pool_pre_ping=True,  # TODO: benchmark this. i see too many errors about connections being closed by the server
+        pool_recycle=60,  # TODO: benchmark this. i see too many errors about connections being closed by the server
     )
 
     LOGGER.info("migrating...")
