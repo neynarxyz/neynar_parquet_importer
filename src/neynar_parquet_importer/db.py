@@ -310,48 +310,35 @@ def import_parquet(
 
     # LOGGER.debug("waiting for %s futures", len(fs))
 
+    # update our database entry's last_row_group_imported
     # read them in order rather than with as_completed
-    # TODO: this saves progress slower than i expected
-    # TODO: drain this so that we don't hold a ton of memory
+    # TODO: have all the tables do this in another thread?
+    update_tracking_stmt = tracking_table.update().where(
+        tracking_table.c.id == tracking_id
+    )
     i = file_age_s = row_age_s = None
     while fs:
-        if SHUTDOWN_EVENT.is_set():
-            row_group_executor.shutdown(cancel_futures=True, wait=False)
-            break
+        f = fs.pop(0)
 
-        try:
-            (i, file_age_s, row_age_s) = fs[0].result(timeout=5)
-        except TimeoutError:
-            # LOGGER.debug("TimeoutError")
-            continue
-
-        fs.pop(0)
-
-        # update our database entry's last_row_group_imported
-        # TODO: move this outside this function so that we can do them in order while doing this function in parallel
-        update_tracking_stmt = (
-            tracking_table.update()
-            .where(tracking_table.c.id == tracking_id)
-            .values(last_row_group_imported=i)
-        )
+        (i, file_age_s, row_age_s) = f.result()
 
         # TODO: connect inside or outside the loop?
         with engine.connect() as conn:
-            conn.execute(update_tracking_stmt)
+            conn.execute(update_tracking_stmt.values(last_row_group_imported=i))
             conn.commit()
 
         # TODO: metric here?
-        if num_row_groups > 1:
-            LOGGER.debug(
-                "Completed upsert #%s/%s for %s",
-                f"{i+1:_}",
-                f"{num_row_groups:_}",
-                table_name,
-                extra={
-                    "file_age_s": file_age_s,
-                    "row_age_s": row_age_s,
-                },
-            )
+        # if num_row_groups > 1:
+        LOGGER.debug(
+            "Completed upsert #%s/%s for %s",
+            f"{i+1:_}",
+            f"{num_row_groups:_}",
+            table_name,
+            extra={
+                "file_age_s": file_age_s,
+                "row_age_s": row_age_s,
+            },
+        )
 
     file_size = path.getsize(local_filename)
 
@@ -362,7 +349,7 @@ def import_parquet(
     )
 
     # TODO: datadog metrics instead?
-    if num_row_groups == i + 1:
+    if i is not None and num_row_groups == i + 1:
         LOGGER.info(
             "finished import",
             extra={
@@ -383,6 +370,7 @@ def import_parquet(
                 "row_age_s": row_age_s,
                 "table_name": table_name,
                 "file_name": local_filename,
+                "i": i,
                 "num_row_groups": num_row_groups,
                 "num_rows": parquet_file.metadata.num_rows,
                 "file_size": file_size,
@@ -409,38 +397,25 @@ def process_batch(
 
     batch = parquet_file.read_row_group(i)
 
-    # TODO: use batch.to_pylist() instead?
-    data = batch.to_pydict()
+    rows = batch.to_pylist()  # Direct conversion to Python-native types for sqlalchemy
+
+    # TODO: i don't love this
+    # TODO: we used to have code here that would remove duplicate ids, but I don't think that's necessary anymore
+    for row in rows:
+        for col_name in row.keys():
+            row[col_name] = clean_parquet_data(col_name, row[col_name])
 
     # TODO: use Abstract Base Classes to make this easy to extend
 
-    # collect into a different dict so that we can remove dupes
-    # NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
-    # TODO: have a helper function here that makes it easier to clean up the data
-    rows = {
-        tuple(data[pk_col.name][i] for pk_col in primary_key_columns): {
-            col_name: clean_parquet_data(col_name, data[col_name][i])
-            for col_name in data
-        }
-        for i in range(len(batch))
-    }
-
-    # discard the keys
-    rows = list(rows.values())
-
-    if len(batch) > len(rows):
-        LOGGER.debug(
-            "Dropping %s rows with duplicate primary keys",
-            len(batch) - len(rows),
-        )
+    # TODO: call clean_parquet_data for each of the columns in the rows
 
     # insert or update the rows
     stmt = pg_insert(table).values(rows)
 
-    # TODO: only upsert where updated_at is newer than the existing row
+    # only upsert where updated_at is newer than the existing row
     upsert_stmt = stmt.on_conflict_do_update(
         index_elements=primary_key_columns,
-        set_={col: stmt.excluded[col] for col in data.keys()},
+        set_={col: stmt.excluded[col] for col in rows[0].keys()},
         where=(stmt.excluded["updated_at"] > table.c.updated_at),
     )
 
@@ -471,7 +446,7 @@ def process_batch(
     statsd.gauge("parquet_row_age_s", row_age_s, tags=dd_tags)
     statsd.increment(
         "num_parquet_rows_imported",
-        value=len(data),
+        value=len(rows),
         tags=dd_tags,
     )
 

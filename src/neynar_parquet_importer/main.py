@@ -174,8 +174,7 @@ def sync_parquet_to_db(
                 "Sleeping until the next incremental is ready",
                 extra={
                     "table": table_name,
-                    "next_end_timestamp": next_end_timestamp,
-                    "now": now,
+                    "next_end": next_end_timestamp,
                 },
             )
             time.sleep(next_end_timestamp - now)
