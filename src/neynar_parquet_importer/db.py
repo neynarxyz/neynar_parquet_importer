@@ -336,18 +336,18 @@ def import_parquet(
             conn.commit()
 
         # TODO: metric here?
-        # if num_row_groups > 1:
-        LOGGER.debug(
-            "Completed upsert #%s/%s for %s",
-            f"{i+1:_}",
-            f"{num_row_groups:_}",
-            table_name,
-            extra={
-                "file_age_s": file_age_s,
-                "row_age_s": row_age_s,
-                "last_updated_at": last_updated_at.timestamp(),
-            },
-        )
+        if num_row_groups > 1:
+            LOGGER.info(
+                "Completed upsert #%s/%s for %s",
+                f"{i+1:_}",
+                f"{num_row_groups:_}",
+                table_name,
+                extra={
+                    "file_age_s": file_age_s,
+                    "row_age_s": row_age_s,
+                    "last_updated_at": last_updated_at.timestamp(),
+                },
+            )
 
         # TODO: think about this more
         if fs:
@@ -361,7 +361,7 @@ def import_parquet(
         tags=dd_tags,
     )
 
-    # TODO: datadog metrics instead?
+    # TODO: datadog metrics here?
     if i is not None and num_row_groups == i + 1:
         LOGGER.info(
             "finished import",
