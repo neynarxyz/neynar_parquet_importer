@@ -4,14 +4,14 @@ import glob
 import json
 from os import path
 import re
-from time import sleep, time
+from time import time
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .logger import LOGGER
 from .s3 import parse_parquet_filename
-from .settings import Settings, SHUTDOWN_EVENT
+from .settings import Settings
 
 # TODO: detect this from the table
 # arrays and json columns are stored as json in parquet because that was easier than dealing with the schema

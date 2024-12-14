@@ -1,6 +1,5 @@
 import logging
 import os
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
