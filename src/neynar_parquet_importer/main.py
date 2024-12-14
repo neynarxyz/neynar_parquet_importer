@@ -208,6 +208,7 @@ def mark_completed(db_engine, parquet_import_tracking, filename):
 
     with db_engine.connect() as conn:
         conn.execute(stmt)
+        conn.commit()
 
     # this is too verbose
     # LOGGER.debug("completed", extra={"file": filename})

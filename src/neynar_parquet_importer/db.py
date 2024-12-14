@@ -28,7 +28,6 @@ def init_db(uri, parquet_tables, settings: Settings):
     engine = create_engine(
         uri,
         pool_size=settings.postgres_pool_size,
-        isolation_level="AUTOCOMMIT",
         pool_reset_on_return=None,
         pool_timeout=30,
         # pool_pre_ping=True,  # TODO: benchmark this. i see too many errors about connections being closed by the server
@@ -78,6 +77,7 @@ def init_db(uri, parquet_tables, settings: Settings):
                         {"schema_name": settings.postgres_schema},
                     )
                 conn.execute(migration)
+                conn.commit()
 
     LOGGER.info("migrations complete.")
 
@@ -233,6 +233,7 @@ def import_parquet(
     with engine.connect() as conn:
         # Execute the statement and fetch the result
         result = conn.execute(upsert_stmt)
+        conn.commit()
         row = result.fetchone()
 
     # Extract the id and last_row_group_imported
@@ -312,14 +313,14 @@ def import_parquet(
     # read them in order rather than with as_completed
     # TODO: this saves progress slower than i expected
     # TODO: drain this so that we don't hold a ton of memory
-    file_age_s = row_age_s = None
+    i = file_age_s = row_age_s = None
     while fs:
         if SHUTDOWN_EVENT.is_set():
             row_group_executor.shutdown(cancel_futures=True, wait=False)
             break
 
         try:
-            (i, file_age_s, row_age_s) = fs[0].result(timeout=2)
+            (i, file_age_s, row_age_s) = fs[0].result(timeout=5)
         except TimeoutError:
             # LOGGER.debug("TimeoutError")
             continue
@@ -337,6 +338,7 @@ def import_parquet(
         # TODO: connect inside or outside the loop?
         with engine.connect() as conn:
             conn.execute(update_tracking_stmt)
+            conn.commit()
 
         # TODO: metric here?
         if num_row_groups > 1:
@@ -360,18 +362,32 @@ def import_parquet(
     )
 
     # TODO: datadog metrics instead?
-    LOGGER.info(
-        "finished import",
-        extra={
-            "file_age_s": file_age_s,
-            "row_age_s": row_age_s,
-            "table_name": table_name,
-            "file_name": local_filename,
-            "num_row_groups": num_row_groups,
-            "num_rows": parquet_file.metadata.num_rows,
-            "file_size": file_size,
-        },
-    )
+    if num_row_groups == i + 1:
+        LOGGER.info(
+            "finished import",
+            extra={
+                "file_age_s": file_age_s,
+                "row_age_s": row_age_s,
+                "table_name": table_name,
+                "file_name": local_filename,
+                "num_row_groups": num_row_groups,
+                "num_rows": parquet_file.metadata.num_rows,
+                "file_size": file_size,
+            },
+        )
+    else:
+        LOGGER.info(
+            "incomplete import",
+            extra={
+                "file_age_s": file_age_s,
+                "row_age_s": row_age_s,
+                "table_name": table_name,
+                "file_name": local_filename,
+                "num_row_groups": num_row_groups,
+                "num_rows": parquet_file.metadata.num_rows,
+                "file_size": file_size,
+            },
+        )
 
 
 def maximum_parquet_age():
@@ -433,6 +449,7 @@ def process_batch(
 
     with engine.connect() as conn:
         conn.execute(upsert_stmt)
+        conn.commit()
 
     now = time()
 
