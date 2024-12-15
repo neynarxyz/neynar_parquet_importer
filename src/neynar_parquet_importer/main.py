@@ -72,124 +72,132 @@ def sync_parquet_to_db(
 
     TODO: run downloads and imports in parallel to improve initial sync times
     """
-    last_import_filename = None
-    parquet_import_tracking = get_table(db_engine, "parquet_import_tracking")
-    s3_client = get_s3_client(settings)
+    try:
+        last_import_filename = None
+        parquet_import_tracking = get_table(db_engine, "parquet_import_tracking")
+        s3_client = get_s3_client(settings)
 
-    incremental_filename = check_for_existing_incremental_import(
-        db_engine, settings, table_name
-    )
-    if incremental_filename:
-        # if we have imported an incremental, then we should start there instead of at the full
-        # TODO: if this is very old, we might want to start with a full instead
-        LOGGER.debug("Found existing incremental import %s", incremental_filename)
+        incremental_filename = check_for_existing_incremental_import(
+            db_engine, settings, table_name
+        )
+        if incremental_filename:
+            # if we have imported an incremental, then we should start there instead of at the full
+            # TODO: if this is very old, we might want to start with a full instead
+            LOGGER.debug("Found existing incremental import %s", incremental_filename)
 
-        if not os.path.exists(incremental_filename):
-            last_start_timestamp = parse_parquet_filename(incremental_filename)[
-                "start_timestamp"
-            ]
+            if not os.path.exists(incremental_filename):
+                last_start_timestamp = parse_parquet_filename(incremental_filename)[
+                    "start_timestamp"
+                ]
 
-            incremental_filename = download_incremental(
-                s3_client,
-                settings,
-                table_name,
-                last_start_timestamp,
-                progress_callbacks["incremental_bytes"],
-                progress_callbacks["empty_steps"],
+                incremental_filename = download_incremental(
+                    s3_client,
+                    settings,
+                    table_name,
+                    last_start_timestamp,
+                    progress_callbacks["incremental_bytes"],
+                    progress_callbacks["empty_steps"],
+                )
+
+            if incremental_filename:
+                import_parquet(
+                    db_engine,
+                    table_name,
+                    incremental_filename,
+                    "incremental",
+                    progress_callbacks["incremental_steps"],
+                    progress_callbacks["empty_steps"],
+                    row_group_executor,
+                    settings,
+                )
+
+                last_import_filename = incremental_filename
+
+        if last_import_filename is None:
+            # no incrementals yet (or a very old one), start with the newest full file
+            full_filename = check_for_existing_full_import(
+                db_engine, settings, table_name
             )
 
-        if incremental_filename:
+            # TODO: spawn this so we can check for incrementals while this is downloading
+            # TODO: need to be sure we handle "mark_completed" properly
+            if full_filename is None or not os.path.exists(full_filename):
+                # if no full export, download the latest one
+                full_filename = download_latest_full(
+                    s3_client, settings, table_name, progress_callbacks["full_bytes"]
+                )
+
             import_parquet(
                 db_engine,
                 table_name,
-                incremental_filename,
-                "incremental",
-                progress_callbacks["incremental_steps"],
+                full_filename,
+                "full",
+                progress_callbacks["full_steps"],
                 progress_callbacks["empty_steps"],
                 row_group_executor,
                 settings,
             )
 
-            last_import_filename = incremental_filename
+            last_import_filename = full_filename
 
-    if last_import_filename is None:
-        # no incrementals yet (or a very old one), start with the newest full file
-        full_filename = check_for_existing_full_import(db_engine, settings, table_name)
+        next_start_timestamp = parse_parquet_filename(last_import_filename)[
+            "end_timestamp"
+        ]
+        next_end_timestamp = next_start_timestamp + settings.incremental_duration
 
-        # TODO: spawn this so we can check for incrementals while this is downloading
-        # TODO: need to be sure we handle "mark_completed" properly
-        if full_filename is None or not os.path.exists(full_filename):
-            # if no full export, download the latest one
-            full_filename = download_latest_full(
-                s3_client, settings, table_name, progress_callbacks["full_bytes"]
+        # download all the incrementals. loops forever
+        fs = []
+        while not SHUTDOWN_EVENT.is_set():
+            # mark files completed in order. this keeps us from skipping items if we have to restart
+            completed_filenames = []
+            while fs:
+                if fs[0].done():
+                    f = fs.pop(0)
+
+                    incremental_filename = f.result()
+
+                    completed_filenames.append(incremental_filename)
+                elif fs[0].cancelled():
+                    LOGGER.debug("cancelled")
+                    return
+                else:
+                    break
+
+            mark_completed(db_engine, parquet_import_tracking, completed_filenames)
+
+            # TODO: if fs is super long, what should we do?
+
+            now = time.time()
+            if now < next_end_timestamp:
+                LOGGER.debug(
+                    "Sleeping until the next incremental is ready",
+                    extra={
+                        "table": table_name,
+                        "next_end": next_end_timestamp,
+                    },
+                )
+                time.sleep(next_end_timestamp - now)
+
+            # TODO: spawn a task on file_executor here
+            # TODO: have an executor for s3 and another for db?
+            # TODO: how should we handle gaps when we start? i think we need a thread that saves the next start row. have a channel of oneshots?
+            f = file_executor.submit(
+                download_and_import_incremental_parquet,
+                db_engine,
+                s3_client,
+                table_name,
+                next_start_timestamp,
+                progress_callbacks,
+                row_group_executor,
+                settings,
             )
+            fs.append(f)
 
-        import_parquet(
-            db_engine,
-            table_name,
-            full_filename,
-            "full",
-            progress_callbacks["full_steps"],
-            progress_callbacks["empty_steps"],
-            row_group_executor,
-            settings,
-        )
-
-        last_import_filename = full_filename
-
-    next_start_timestamp = parse_parquet_filename(last_import_filename)["end_timestamp"]
-    next_end_timestamp = next_start_timestamp + settings.incremental_duration
-
-    # download all the incrementals. loops forever
-    fs = []
-    while not SHUTDOWN_EVENT.is_set():
-        # mark files completed in order. this keeps us from skipping items if we have to restart
-        completed_filenames = []
-        while fs:
-            if fs[0].done():
-                f = fs.pop(0)
-
-                incremental_filename = f.result()
-
-                completed_filenames.append(incremental_filename)
-            elif fs[0].cancelled():
-                LOGGER.debug("cancelled")
-                return
-            else:
-                break
-
-        mark_completed(db_engine, parquet_import_tracking, completed_filenames)
-
-        # TODO: if fs is super long, what should we do?
-
-        now = time.time()
-        if now < next_end_timestamp:
-            LOGGER.debug(
-                "Sleeping until the next incremental is ready",
-                extra={
-                    "table": table_name,
-                    "next_end": next_end_timestamp,
-                },
-            )
-            time.sleep(next_end_timestamp - now)
-
-        # TODO: spawn a task on file_executor here
-        # TODO: have an executor for s3 and another for db?
-        # TODO: how should we handle gaps when we start? i think we need a thread that saves the next start row. have a channel of oneshots?
-        f = file_executor.submit(
-            download_and_import_incremental_parquet,
-            db_engine,
-            s3_client,
-            table_name,
-            next_start_timestamp,
-            progress_callbacks,
-            row_group_executor,
-            settings,
-        )
-        fs.append(f)
-
-        next_start_timestamp += settings.incremental_duration
-        next_end_timestamp += settings.incremental_duration
+            next_start_timestamp += settings.incremental_duration
+            next_end_timestamp += settings.incremental_duration
+    finally:
+        # this should run forever. any exit here means we should shut down the whole app
+        SHUTDOWN_EVENT.set()
 
 
 def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
@@ -220,56 +228,59 @@ def download_and_import_incremental_parquet(
     settings: Settings,
 ):
     incremental_filename = None
+    try:
+        while incremental_filename is None:
+            # TODO: check shutdown signal here?
 
-    while incremental_filename is None:
-        # TODO: check shutdown signal here?
-
-        incremental_filename = download_incremental(
-            s3_client,
-            settings,
-            table_name,
-            next_start_timestamp,
-            progress_callbacks["incremental_bytes"],
-            progress_callbacks["empty_steps"],
-        )
-
-        if incremental_filename is None:
-            if SHUTDOWN_EVENT.is_set():
-                LOGGER.debug("Shutting down")
-                return
-
-            LOGGER.debug(
-                "Next incremental for %s should be ready soon. Sleeping...", table_name
-            )
-            # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
-            time.sleep(settings.incremental_duration / 2.0)
-
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        try:
-            import_parquet(
-                db_engine,
-                table_name,
-                incremental_filename,
-                "incremental",
-                progress_callbacks["incremental_steps"],
-                progress_callbacks["empty_steps"],
-                row_group_executor,
+            incremental_filename = download_incremental(
+                s3_client,
                 settings,
+                table_name,
+                next_start_timestamp,
+                progress_callbacks["incremental_bytes"],
+                progress_callbacks["empty_steps"],
             )
-            break  # Exit loop if successful
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:
-            if e.args == ("cannot schedule new futures after shutdown",):
-                LOGGER.debug("Executor shutdown")
-                break
-            else:
-                # TODO: make this less noisy during shutdown of the executor
-                LOGGER.exception(f"Attempt {attempt} failed")
-                if attempt == max_retries:
-                    SHUTDOWN_EVENT.set()
-                    raise
+
+            if incremental_filename is None:
+                if SHUTDOWN_EVENT.is_set():
+                    LOGGER.debug("Shutting down")
+                    return
+
+                LOGGER.debug(
+                    "Next incremental for %s should be ready soon. Sleeping...",
+                    table_name,
+                )
+                # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
+                time.sleep(settings.incremental_duration / 2.0)
+
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                import_parquet(
+                    db_engine,
+                    table_name,
+                    incremental_filename,
+                    "incremental",
+                    progress_callbacks["incremental_steps"],
+                    progress_callbacks["empty_steps"],
+                    row_group_executor,
+                    settings,
+                )
+                break  # Exit loop if successful
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                if e.args == ("cannot schedule new futures after shutdown",):
+                    LOGGER.debug("Executor shutdown")
+                    break
+                else:
+                    # TODO: make this less noisy during shutdown of the executor
+                    LOGGER.exception(f"Attempt {attempt} failed")
+                    if attempt == max_retries:
+                        raise
+    except:
+        SHUTDOWN_EVENT.set()
+        raise
 
     return incremental_filename
 
@@ -405,7 +416,7 @@ def main(settings: Settings):
             table_executor.shutdown(wait=False, cancel_futures=True)
             file_executor.shutdown(wait=False, cancel_futures=True)
             for executor in row_group_executors.values():
-                executor.shutdown(wait=True, cancel_futures=True)
+                executor.shutdown(wait=False, cancel_futures=True)
 
             LOGGER.debug("disposing db engine")
             db_engine.dispose()
