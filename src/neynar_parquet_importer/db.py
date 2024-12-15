@@ -252,6 +252,8 @@ def import_parquet(
 
         statsd.gauge("parquet_file_age_s", file_age_s, tags=dd_tags)
 
+        # there is no row age for an empty file. use the file age instead
+        statsd.gauge("parquet_row_age_s", file_age_s, tags=dd_tags)
         return
 
     if last_row_group_imported is None:

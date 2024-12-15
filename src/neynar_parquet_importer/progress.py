@@ -4,8 +4,6 @@ Globals and helpers that are used across the app. You shouldn't need to modify a
 
 from multiprocessing import Value
 
-from .logger import LOGGER
-
 
 class ProgressCallback:
     """Helper class for updating the progress bars in a thread-safe way."""

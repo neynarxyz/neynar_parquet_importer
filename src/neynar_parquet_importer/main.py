@@ -38,23 +38,29 @@ LOGGER = logging.getLogger("app")
 # TODO: fetch this from env? tools to generate this list from the s3 bucket?
 # NOTE: "messages" is very large and so is not part of parquet exports
 ALL_TABLES = {
+    # for these, set `npe_version=v2` `parquet_s3_schema=farcaster` `incremental_duration=300`
     ("public-postgres", "farcaster"): [
         "blocks",
-        "casts",
-        "channel_follows",
+        "casts",  # NOTE: `casts` is VERY large with LOTS of writes!
+        # "channel_members",  # TODO: schema for this coming soon!
+        # "channels",  # TODO: schema for this coming soon!
         "fids",
         "fnames",
         "links",
-        "power_users",
-        "profile_with_addresses",
-        "reactions",
+        # "profile_with_addresses",  # TODO: `profile_with_addresses` is a view and needs some special handling for duplicate ids
+        "reactions",  # NOTE: `reactions` is VERY large with LOTS of writes!
         "signers",
         "storage",
         "user_data",
-        "verifications",
+        # "verifications",  # NOTE: please use the nindexer verifications table instead
         "warpcast_power_users",
     ],
+    # for these, set `npe_version=v3` `parquet_s3_schema=nindexer` `incremental_duration=1`
     ("public-postgres", "nindexer"): [
+        # "follow_counts",  # TODO: schema for this coming soon!
+        # "follows",  # TODO: schema for this coming soon!
+        # "neynar_user_scores",  # TODO: schema for this coming soon!
+        # "profiles",  # TODO: schema for this coming soon!
         "verifications",
     ],
 }
