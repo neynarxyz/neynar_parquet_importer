@@ -22,7 +22,7 @@ dependencies = [
     "parso==0.8.4",
     "pexpect==4.9.0",
     "prompt-toolkit==3.0.47",
-    "psycopg2==2.9.9",
+    "psycopg>=3.2.3",
     "ptyprocess==0.7.0",
     "pure-eval==0.2.3",
     "pyarrow==17.0.0",

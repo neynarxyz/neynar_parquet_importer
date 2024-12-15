@@ -142,7 +142,7 @@ def sync_parquet_to_db(
 
     # download all the incrementals. loops forever
     fs = []
-    while True:
+    while not SHUTDOWN_EVENT.is_set():
         # mark files completed in order. this keeps us from skipping items if we have to restart
         completed_filenames = []
         while fs:
