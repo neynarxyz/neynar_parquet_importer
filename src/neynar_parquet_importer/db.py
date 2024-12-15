@@ -30,8 +30,8 @@ def init_db(uri, parquet_tables, settings: Settings):
         pool_size=settings.postgres_pool_size,
         pool_reset_on_return=None,
         pool_timeout=30,
-        # pool_pre_ping=True,  # TODO: benchmark this. i see too many errors about connections being closed by the server
-        pool_recycle=60,  # TODO: benchmark this. i see too many errors about connections being closed by the server
+        pool_pre_ping=True,  # TODO: benchmark this. i see too many errors about connections being closed by the server
+        # pool_recycle=60,  # TODO: benchmark this. i see too many errors about connections being closed by the server
     )
 
     LOGGER.info("migrating...")
@@ -170,7 +170,7 @@ def clean_parquet_data(col_name, value):
     return value
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=None)
 def get_table(engine, table_name):
     metadata = MetaData()
     return Table(table_name, metadata, autoload_with=engine)
