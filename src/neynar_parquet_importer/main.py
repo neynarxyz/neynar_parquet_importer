@@ -299,6 +299,8 @@ def main(settings: Settings):
 
             db_engine = init_db(str(settings.postgres_dsn), tables, settings)
 
+            # TODO: test the s3 client here?
+
             target_dir = settings.target_dir()
             if not target_dir.exists():
                 target_dir.mkdir(parents=True)
