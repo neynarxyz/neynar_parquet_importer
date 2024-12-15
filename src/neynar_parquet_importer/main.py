@@ -286,21 +286,23 @@ def download_and_import_incremental_parquet(
 
 
 def main(settings: Settings):
-    if settings.tables:
-        tables = settings.tables.split(",")
-    else:
-        tables = ALL_TABLES[(settings.parquet_s3_database, settings.parquet_s3_schema)]
-
-    LOGGER.info("Tables: %s", ",".join(tables))
-
-    db_engine = init_db(str(settings.postgres_dsn), tables, settings)
-
-    target_dir = settings.target_dir()
-    if not target_dir.exists():
-        target_dir.mkdir(parents=True)
-
     with ExitStack() as stack:
         try:
+            if settings.tables:
+                tables = settings.tables.split(",")
+            else:
+                tables = ALL_TABLES[
+                    (settings.parquet_s3_database, settings.parquet_s3_schema)
+                ]
+
+            LOGGER.info("Tables: %s", ",".join(tables))
+
+            db_engine = init_db(str(settings.postgres_dsn), tables, settings)
+
+            target_dir = settings.target_dir()
+            if not target_dir.exists():
+                target_dir.mkdir(parents=True)
+
             # these pretty progress bars show when you run the application in an interactive terminal
             bytes_progress = Progress(
                 *Progress.get_default_columns(),
@@ -394,21 +396,17 @@ def main(settings: Settings):
 
             for f in as_completed(futures):
                 table_name = futures[f]
-                try:
-                    result = (
-                        f.result()
-                    )  # will raise an exception if the future ended with one
-                    result
-                except Exception:
-                    LOGGER.exception(f"{table_name} generated an exception")
-                else:
-                    LOGGER.warning("%s completed. this is unexpected", table_name)
+
+                # will raise an exception if the future ended with one
+                f.result()
 
                 # all these futures should run forever
                 # any completions are unexpected
-                break
+                raise RuntimeError("table completed. this is unexpected", table_name)
         except KeyboardInterrupt:
             LOGGER.info("interrupted")
+        except Exception:
+            LOGGER.exception("unhandled exception")
         finally:
             LOGGER.info("shutting down")
             SHUTDOWN_EVENT.set()
