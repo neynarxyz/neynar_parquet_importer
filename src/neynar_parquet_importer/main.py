@@ -58,9 +58,9 @@ ALL_TABLES = {
     # for these, set `npe_version=v3` `parquet_s3_schema=nindexer` `incremental_duration=1`
     ("public-postgres", "nindexer"): [
         # "follow_counts",  # TODO: schema for this coming soon!
-        # "follows",  # TODO: schema for this coming soon!
+        "follows",
         # "neynar_user_scores",  # TODO: schema for this coming soon!
-        # "profiles",  # TODO: schema for this coming soon!
+        "profiles",
         "verifications",
     ],
 }
