@@ -268,6 +268,7 @@ def download_and_import_incremental_parquet(
                 # TODO: make this less noisy during shutdown of the executor
                 LOGGER.exception(f"Attempt {attempt} failed")
                 if attempt == max_retries:
+                    SHUTDOWN_EVENT.set()
                     raise
 
     return incremental_filename
