@@ -201,6 +201,13 @@ def sync_parquet_to_db(
 
             next_start_timestamp += settings.incremental_duration
             next_end_timestamp += settings.incremental_duration
+    except Exception as e:
+        if e.args == ("cannot schedule new futures after shutdown",):
+            LOGGER.debug("Executor shutdown")
+            return
+
+        LOGGER.exception("unhandled exception inside sync_parquet_to_db")
+        raise
     finally:
         # this should run forever. any exit here means we should shut down the whole app
         SHUTDOWN_EVENT.set()
@@ -236,8 +243,6 @@ def download_and_import_incremental_parquet(
     incremental_filename = None
     try:
         while incremental_filename is None:
-            # TODO: check shutdown signal here?
-
             incremental_filename = download_incremental(
                 s3_client,
                 settings,
@@ -257,34 +262,24 @@ def download_and_import_incremental_parquet(
                     table_name,
                 )
                 # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
-                time.sleep(settings.incremental_duration / 2.0)
+                time.sleep(min(60, settings.incremental_duration / 2.0))
 
-        max_retries = 3
-        for attempt in range(1, max_retries + 1):
-            try:
-                import_parquet(
-                    db_engine,
-                    table_name,
-                    incremental_filename,
-                    "incremental",
-                    progress_callbacks["incremental_steps"],
-                    progress_callbacks["empty_steps"],
-                    row_group_executor,
-                    settings,
-                )
-                break  # Exit loop if successful
-            except KeyboardInterrupt:
-                raise
-            except Exception as e:
-                if e.args == ("cannot schedule new futures after shutdown",):
-                    LOGGER.debug("Executor shutdown")
-                    break
-                else:
-                    # TODO: make this less noisy during shutdown of the executor
-                    LOGGER.exception(f"Attempt {attempt} failed")
-                    if attempt == max_retries:
-                        raise
-    except:
+        import_parquet(
+            db_engine,
+            table_name,
+            incremental_filename,
+            "incremental",
+            progress_callbacks["incremental_steps"],
+            progress_callbacks["empty_steps"],
+            row_group_executor,
+            settings,
+        )
+    except Exception as e:
+        if e.args == ("cannot schedule new futures after shutdown",):
+            LOGGER.debug("Executor shutdown")
+            return
+
+        LOGGER.exception("Exception insiside import_parquet")
         SHUTDOWN_EVENT.set()
         raise
 
