@@ -210,7 +210,7 @@ def sync_parquet_to_db(
             next_end_timestamp += settings.incremental_duration
     except Exception as e:
         if e.args == ("cannot schedule new futures after shutdown",):
-            LOGGER.debug("Executor shutdown")
+            LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
             return
 
         LOGGER.exception("unhandled exception inside sync_parquet_to_db")
@@ -283,10 +283,10 @@ def download_and_import_incremental_parquet(
         )
     except Exception as e:
         if e.args == ("cannot schedule new futures after shutdown",):
-            LOGGER.debug("Executor shutdown")
+            LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
             return
 
-        LOGGER.exception("Exception inside import_parquet")
+        LOGGER.exception("Exception inside sync_parquet_to_db")
         SHUTDOWN_EVENT.set()
         raise
 
@@ -379,12 +379,14 @@ def main(settings: Settings):
             table_executor = stack.enter_context(
                 ThreadPoolExecutor(max_workers=len(tables))
             )
-            file_executor = stack.enter_context(
-                ThreadPoolExecutor(max_workers=settings.s3_pool_size)
-            )
-
+            file_workers = max(2, (settings.s3_pool_size) // (len(tables) + 1))
+            file_executors = {
+                table_name: stack.enter_context(
+                    ThreadPoolExecutor(max_workers=file_workers)
+                )
+                for table_name in tables
+            }
             row_workers = max(2, (settings.postgres_pool_size) // (len(tables) + 1))
-            LOGGER.info("Row workers: %s", row_workers)
             row_group_executors = {
                 table_name: stack.enter_context(
                     ThreadPoolExecutor(max_workers=row_workers)
@@ -392,11 +394,13 @@ def main(settings: Settings):
                 for table_name in tables
             }
 
+            LOGGER.info("workers: %s", extra={"row": row_workers, "file": file_workers})
+
             futures = {
                 table_executor.submit(
                     sync_parquet_to_db,
                     db_engine,
-                    file_executor,
+                    file_executors[table_name],
                     row_group_executors[table_name],
                     table_name,
                     progress_callbacks,
