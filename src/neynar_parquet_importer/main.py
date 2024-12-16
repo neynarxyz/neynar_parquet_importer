@@ -295,6 +295,7 @@ def download_and_import_incremental_parquet(
 
 def main(settings: Settings):
     with ExitStack() as stack:
+        db_engine = table_executor = file_executor = row_group_executors = None
         try:
             if settings.tables:
                 tables = settings.tables.split(",")
@@ -426,13 +427,19 @@ def main(settings: Settings):
             LOGGER.info("shutting down")
             SHUTDOWN_EVENT.set()
 
-            table_executor.shutdown(wait=False, cancel_futures=True)
-            file_executor.shutdown(wait=False, cancel_futures=True)
-            for executor in row_group_executors.values():
-                executor.shutdown(wait=False, cancel_futures=True)
+            if table_executor is not None:
+                table_executor.shutdown(wait=False, cancel_futures=True)
 
-            LOGGER.debug("disposing db engine")
-            db_engine.dispose()
+            if file_executor is not None:
+                file_executor.shutdown(wait=False, cancel_futures=True)
+
+            if row_group_executors is not None:
+                for executor in row_group_executors.values():
+                    executor.shutdown(wait=False, cancel_futures=True)
+
+            if db_engine is not None:
+                LOGGER.debug("disposing db engine")
+                db_engine.dispose()
 
 
 if __name__ == "__main__":
