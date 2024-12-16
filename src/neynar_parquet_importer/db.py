@@ -1,3 +1,4 @@
+from concurrent.futures import CancelledError
 from datadog import statsd
 from functools import lru_cache
 import glob
@@ -321,16 +322,19 @@ def import_parquet(
     i = file_age_s = row_age_s = None
     while fs:
         f = fs.pop(0)
-        (i, file_age_s, row_age_s, last_updated_at) = f.result()
-
-        # no need to call update for every entry if a bunch are done. skip to the last finished one
-        if fs:
-            while fs:
-                if fs[0].done():
-                    f = fs.pop(0)
-                else:
-                    break
+        try:
             (i, file_age_s, row_age_s, last_updated_at) = f.result()
+
+            # no need to call update for every entry if a bunch are done. skip to the last finished one
+            if fs:
+                while fs:
+                    if fs[0].done():
+                        f = fs.pop(0)
+                    else:
+                        break
+                (i, file_age_s, row_age_s, last_updated_at) = f.result()
+        except CancelledError:
+            return
 
         # TODO: connect inside or outside the loop?
         with engine.connect() as conn:

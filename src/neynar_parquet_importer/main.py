@@ -162,6 +162,9 @@ def sync_parquet_to_db(
 
                     incremental_filename = f.result()
 
+                    if incremental_filename is None:
+                        raise RuntimeError("incremental is None")
+
                     completed_filenames.append(incremental_filename)
                 elif fs[0].cancelled():
                     LOGGER.debug("cancelled")
@@ -279,7 +282,7 @@ def download_and_import_incremental_parquet(
             LOGGER.debug("Executor shutdown")
             return
 
-        LOGGER.exception("Exception insiside import_parquet")
+        LOGGER.exception("Exception inside import_parquet")
         SHUTDOWN_EVENT.set()
         raise
 
