@@ -166,4 +166,12 @@ def get_s3_client(settings: Settings):
 
 @lru_cache(maxsize=1)
 def _get_s3_client(max_pool_connections):
-    return boto3.client("s3", config=Config(max_pool_connections=max_pool_connections))
+    config = Config(
+        retries={
+            "max_attempts": 5,
+            "mode": "standard",
+        },
+        max_pool_connections=max_pool_connections,
+    )
+
+    return boto3.client("s3", config=config)
