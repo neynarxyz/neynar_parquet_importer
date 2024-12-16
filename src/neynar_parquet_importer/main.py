@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
@@ -413,6 +414,9 @@ def main(settings: Settings):
             LOGGER.info("interrupted")
         except Exception:
             LOGGER.exception("unhandled exception")
+
+            # TODO: i don't love this. but it seems like we need it
+            sys.exit(1)
         finally:
             LOGGER.info("shutting down")
             SHUTDOWN_EVENT.set()
