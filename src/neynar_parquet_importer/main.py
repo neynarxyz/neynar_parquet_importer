@@ -267,8 +267,7 @@ def download_and_import_incremental_parquet(
                 return
 
             if time.time() > max_wait:
-                LOGGER.error("Max wait exceeded")
-                return
+                raise ValueError("Max wait exceeded", table_name)
 
             incremental_filename = download_incremental(
                 s3_client,
