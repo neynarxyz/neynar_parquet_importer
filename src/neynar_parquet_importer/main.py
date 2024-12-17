@@ -1,3 +1,4 @@
+import atexit
 import logging
 import os
 import sys
@@ -156,7 +157,7 @@ def sync_parquet_to_db(
         ]
         next_end_timestamp = next_start_timestamp + settings.incremental_duration
 
-        max_wait_duration = max(30, 4 * settings.incremental_duration)
+        max_wait_duration = max(60, 4 * settings.incremental_duration)
 
         # download all the incrementals. loops forever
         fs = []
@@ -267,7 +268,15 @@ def download_and_import_incremental_parquet(
                 return
 
             if time.time() > max_wait:
-                raise ValueError("Max wait exceeded", table_name)
+                # this is a sledge hammer. think more about this!
+                raise ValueError(
+                    "Max wait exceeded",
+                    {
+                        "max_wait_duration": max_wait_duration,
+                        "table_name": table_name,
+                        "next_start_timestamp": next_start_timestamp,
+                    },
+                )
 
             incremental_filename = download_incremental(
                 s3_client,
@@ -329,6 +338,7 @@ def main(settings: Settings):
             LOGGER.info("Tables: %s", ",".join(tables))
 
             db_engine = init_db(str(settings.postgres_dsn), tables, settings)
+            atexit.register(db_engine.dispose)
 
             # TODO: test the s3 client here?
 
@@ -462,10 +472,6 @@ def main(settings: Settings):
             if row_group_executors is not None:
                 for executor in row_group_executors.values():
                     executor.shutdown(wait=False, cancel_futures=True)
-
-            if db_engine is not None:
-                LOGGER.debug("disposing db engine")
-                db_engine.dispose()
 
 
 if __name__ == "__main__":
