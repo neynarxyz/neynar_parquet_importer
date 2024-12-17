@@ -1,13 +1,9 @@
 import logging
 from pathlib import PosixPath
-from datadog.dogstatsd import DogStatsd
 from datetime import datetime, timedelta, UTC
 from pythonjsonlogger import jsonlogger
 from rich.logging import RichHandler
 from pprint import pformat
-
-# TODO: i think we want to get this with a lazy setup because the environment variables might not be set yet
-dogstatsd = DogStatsd()
 
 # TODO: i don't love this
 LOGGER = logging.getLogger("app")
@@ -84,7 +80,7 @@ class CustomRichHandler(RichHandler):
 
 
 def setup_logging(level: str, log_format: str):
-    level = getattr(logging, level, None)
+    level = getattr(logging, level.upper(), None)
 
     assert level is not None, f"Invalid log level: {level}"
 
@@ -104,3 +100,6 @@ def setup_logging(level: str, log_format: str):
         level=level,
         handlers=[logHandler],
     )
+
+    # # TODO: make this configurable
+    # logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)

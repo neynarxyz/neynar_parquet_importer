@@ -1,22 +1,51 @@
+from functools import lru_cache
 import os
+import re
 import boto3
 import botocore.exceptions
 from botocore.config import Config
 
-from .logging import LOGGER
+from .logger import LOGGER
 from .settings import Settings
+
+
+def parse_parquet_filename(filename):
+    basename = os.path.basename(filename)
+
+    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", basename)
+    if match:
+        return {
+            "schema_name": match.group(1),
+            "table_name": match.group(2),
+            "start_timestamp": int(match.group(3)),
+            "end_timestamp": int(match.group(4)),
+        }
+    else:
+        raise ValueError("Parquet filename does not match expected format.", filename)
 
 
 def download_latest_full(s3_client, settings: Settings, table_name, progress_callback):
     s3_prefix = settings.parquet_s3_prefix() + "full/"
 
-    response = s3_client.list_objects_v2(
-        Bucket=settings.parquet_s3_bucket,
-        Prefix=s3_prefix + f"{settings.parquet_s3_schema}-{table_name}-0-",
-    )
+    paginator = s3_client.get_paginator("list_objects_v2")
+    operation_parameters = {
+        "Bucket": settings.parquet_s3_bucket,
+        "Prefix": s3_prefix + f"{settings.parquet_s3_schema}-{table_name}-0-",
+    }
+    page_iterator = paginator.paginate(**operation_parameters)
+    latest_file = None
+    for response in page_iterator:
+        response_latest_file = max(response["Contents"], key=lambda x: x["Key"])
 
-    latest_file = max(response["Contents"], key=lambda x: x["Key"].split("/")[-1])
+        if latest_file is None:
+            latest_file = response_latest_file
+        else:
+            if response_latest_file["Key"] > latest_file["Key"]:
+                latest_file = response_latest_file
 
+    LOGGER.debug("Latest full backup: %s", latest_file)
+
+    # TODO: i think sometimes files get split into multiple pieces and this doesn't work right
     latest_size_bytes = latest_file["Size"]
 
     # TODO: log how old this full file is
@@ -31,6 +60,8 @@ def download_latest_full(s3_client, settings: Settings, table_name, progress_cal
     if os.path.exists(local_file_path):
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
+
+    LOGGER.debug("Latest full backup size: %s", latest_size_bytes)
 
     progress_callback.more_steps(latest_size_bytes)
 
@@ -130,4 +161,17 @@ def download_incremental(
 
 
 def get_s3_client(settings: Settings):
-    return boto3.client("s3", config=Config(max_pool_connections=settings.s3_pool_size))
+    return _get_s3_client(settings.s3_pool_size)
+
+
+@lru_cache(maxsize=1)
+def _get_s3_client(max_pool_connections):
+    config = Config(
+        retries={
+            "max_attempts": 5,
+            "mode": "standard",
+        },
+        max_pool_connections=max_pool_connections,
+    )
+
+    return boto3.client("s3", config=config)

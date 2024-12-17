@@ -1,6 +1,6 @@
 import logging
 import os
-import re
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
@@ -15,309 +15,443 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 from rich.table import Table
+from sqlalchemy import update
 
-
-from .app import PROGRESS_BYTES_LOCK, PROGRESS_CHUNKS_LOCK, ProgressCallback
+from .progress import ProgressCallback
 from .db import (
     check_for_existing_full_import,
     check_for_existing_incremental_import,
+    get_table,
     import_parquet,
     init_db,
 )
-from .logging import setup_logging
 from .s3 import (
     download_incremental,
     download_latest_full,
     get_s3_client,
+    parse_parquet_filename,
 )
-from .settings import Settings
+from .settings import SHUTDOWN_EVENT, Settings
 
 LOGGER = logging.getLogger("app")
+
 
 # TODO: fetch this from env? tools to generate this list from the s3 bucket?
 # NOTE: "messages" is very large and so is not part of parquet exports
 ALL_TABLES = {
+    # for these, set `npe_version=v2` `parquet_s3_schema=farcaster` `incremental_duration=300`
     ("public-postgres", "farcaster"): [
+        # "account_verifications",  # TODO: schema for this coming soon!
         "blocks",
-        "casts",
-        "channel_follows",
+        "casts",  # NOTE: `casts` is VERY large with LOTS of writes!
+        # "channel_follows",  # TODO: schema for this coming soon!
+        # "channel_members",  # TODO: schema for this coming soon!
+        # "channels",  # TODO: schema for this coming soon!
         "fids",
         "fnames",
         "links",
-        "power_users",
-        "profile_with_addresses",
-        "reactions",
+        # "power_users",  # TODO: schema for this coming soon!
+        # "profile_with_addresses",  # TODO: `profile_with_addresses` is a view and needs some special handling for duplicate ids
+        "reactions",  # NOTE: `reactions` is VERY large with LOTS of writes!
         "signers",
         "storage",
         "user_data",
-        "verifications",
+        # "verifications",  # NOTE: please use the nindexer verifications table instead
         "warpcast_power_users",
     ],
+    # for these, set `npe_version=v3` `parquet_s3_schema=nindexer` `incremental_duration=1`
     ("public-postgres", "nindexer"): [
+        # "follow_counts",  # TODO: schema for this coming soon!
+        "follows",
+        # "neynar_user_scores",  # TODO: schema for this coming soon!
+        "profiles",
         "verifications",
     ],
 }
 
 
-def parse_parquet_filename(filename):
-    match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", filename)
-    if match:
-        return {
-            "db_name": match.group(1),
-            "table_name": match.group(2),
-            "start_timestamp": int(match.group(3)),
-            "end_timestamp": int(match.group(4)),
-        }
-    else:
-        raise ValueError("Parquet filename does not match expected format.", filename)
-
-
 def sync_parquet_to_db(
     db_engine,
+    file_executor,
+    row_group_executor,
     table_name,
-    full_bytes_downloaded_progress,
-    incremental_bytes_downloaded_progress,
-    full_steps_progress,
-    incremental_steps_progress,
-    empty_steps_progress,
+    progress_callbacks,
     settings: Settings,
 ):
     """Function that runs forever (barring exceptions) to download and import parquet files for a table.
 
     TODO: run downloads and imports in parallel to improve initial sync times
     """
-    last_import_filename = None
+    try:
+        last_import_filename = None
+        parquet_import_tracking = get_table(db_engine, "parquet_import_tracking")
+        s3_client = get_s3_client(settings)
 
-    s3_client = get_s3_client(settings)
+        incremental_filename = check_for_existing_incremental_import(
+            db_engine, settings, table_name
+        )
+        if incremental_filename:
+            # if we have imported an incremental, then we should start there instead of at the full
+            # TODO: if this is very old, we might want to start with a full instead
+            LOGGER.debug("Found existing incremental import %s", incremental_filename)
 
-    incremental_filename = check_for_existing_incremental_import(
-        db_engine, settings, table_name
+            if not os.path.exists(incremental_filename):
+                last_start_timestamp = parse_parquet_filename(incremental_filename)[
+                    "start_timestamp"
+                ]
+
+                incremental_filename = download_incremental(
+                    s3_client,
+                    settings,
+                    table_name,
+                    last_start_timestamp,
+                    progress_callbacks["incremental_bytes"],
+                    progress_callbacks["empty_steps"],
+                )
+
+            if incremental_filename:
+                import_parquet(
+                    db_engine,
+                    table_name,
+                    incremental_filename,
+                    "incremental",
+                    progress_callbacks["incremental_steps"],
+                    progress_callbacks["empty_steps"],
+                    row_group_executor,
+                    settings,
+                )
+
+                last_import_filename = incremental_filename
+
+        if last_import_filename is None:
+            # no incrementals yet (or a very old one), start with the newest full file
+            full_filename = check_for_existing_full_import(
+                db_engine, settings, table_name
+            )
+
+            # TODO: spawn this so we can check for incrementals while this is downloading
+            # TODO: need to be sure we handle "mark_completed" properly
+            if full_filename is None or not os.path.exists(full_filename):
+                # if no full export, download the latest one
+                full_filename = download_latest_full(
+                    s3_client, settings, table_name, progress_callbacks["full_bytes"]
+                )
+
+            import_parquet(
+                db_engine,
+                table_name,
+                full_filename,
+                "full",
+                progress_callbacks["full_steps"],
+                progress_callbacks["empty_steps"],
+                row_group_executor,
+                settings,
+            )
+
+            last_import_filename = full_filename
+
+        next_start_timestamp = parse_parquet_filename(last_import_filename)[
+            "end_timestamp"
+        ]
+        next_end_timestamp = next_start_timestamp + settings.incremental_duration
+
+        # download all the incrementals. loops forever
+        fs = []
+        while not SHUTDOWN_EVENT.is_set():
+            # mark files completed in order. this keeps us from skipping items if we have to restart
+            completed_filenames = []
+            while fs:
+                if fs[0].done():
+                    f = fs.pop(0)
+
+                    incremental_filename = f.result()
+
+                    if incremental_filename is None:
+                        raise RuntimeError("incremental is None")
+
+                    completed_filenames.append(incremental_filename)
+                elif fs[0].cancelled():
+                    LOGGER.debug("cancelled")
+                    return
+                else:
+                    break
+
+            mark_completed(db_engine, parquet_import_tracking, completed_filenames)
+
+            # TODO: if fs is super long, what should we do?
+
+            now = time.time()
+            if now < next_end_timestamp:
+                LOGGER.debug(
+                    "Sleeping until the next incremental is ready",
+                    extra={
+                        "table": table_name,
+                        "next_end": next_end_timestamp,
+                    },
+                )
+                time.sleep(next_end_timestamp - now)
+
+            # TODO: spawn a task on file_executor here
+            # TODO: have an executor for s3 and another for db?
+            # TODO: how should we handle gaps when we start? i think we need a thread that saves the next start row. have a channel of oneshots?
+            f = file_executor.submit(
+                download_and_import_incremental_parquet,
+                db_engine,
+                s3_client,
+                table_name,
+                next_start_timestamp,
+                progress_callbacks,
+                row_group_executor,
+                settings,
+            )
+            fs.append(f)
+
+            next_start_timestamp += settings.incremental_duration
+            next_end_timestamp += settings.incremental_duration
+    except Exception as e:
+        if e.args == ("cannot schedule new futures after shutdown",):
+            LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
+            return
+
+        LOGGER.exception("unhandled exception inside sync_parquet_to_db")
+        raise
+    finally:
+        # this should run forever. any exit here means we should shut down the whole app
+        SHUTDOWN_EVENT.set()
+
+
+def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
+    if not completed_filenames:
+        return
+
+    stmt = (
+        update(parquet_import_tracking)
+        .where(parquet_import_tracking.c.file_name.in_(completed_filenames))
+        .values(completed=True)
     )
-    if incremental_filename:
-        # if we have imported an incremental, then we should start there instead of at the full
-        LOGGER.debug("Found existing incremental import %s", incremental_filename)
 
-        if not os.path.exists(incremental_filename):
-            last_start_timestamp = parse_parquet_filename(incremental_filename)[
-                "start_timestamp"
-            ]
+    with db_engine.connect() as conn:
+        conn.execute(stmt)
+        conn.commit()
 
+    # this is too verbose
+    # LOGGER.debug("completed", extra={"files": completed_filenames})
+
+
+def download_and_import_incremental_parquet(
+    db_engine,
+    s3_client,
+    table_name,
+    next_start_timestamp,
+    progress_callbacks,
+    row_group_executor,
+    settings: Settings,
+):
+    incremental_filename = None
+    try:
+        while incremental_filename is None:
             incremental_filename = download_incremental(
                 s3_client,
                 settings,
                 table_name,
-                last_start_timestamp,
-                incremental_bytes_downloaded_progress,
-                empty_steps_progress,
+                next_start_timestamp,
+                progress_callbacks["incremental_bytes"],
+                progress_callbacks["empty_steps"],
             )
 
-        if incremental_filename:
-            import_parquet(
-                db_engine,
-                table_name,
-                incremental_filename,
-                "incremental",
-                incremental_steps_progress,
-                empty_steps_progress,
-                settings,
-            )
+            if incremental_filename is None:
+                if SHUTDOWN_EVENT.is_set():
+                    LOGGER.debug("Shutting down")
+                    return
 
-            last_import_filename = incremental_filename
-
-    if last_import_filename is None:
-        # no incrementals yet (or a very old one), start with the newest full file
-        full_filename = check_for_existing_full_import(db_engine, settings, table_name)
-
-        if full_filename is None or not os.path.exists(full_filename):
-            # if no full export, download the latest one
-            full_filename = download_latest_full(
-                s3_client, settings, table_name, full_bytes_downloaded_progress
-            )
-
-        import_parquet(
-            db_engine,
-            table_name,
-            full_filename,
-            "full",
-            full_steps_progress,
-            empty_steps_progress,
-            settings,
-        )
-
-        last_import_filename = full_filename
-
-    next_start_timestamp = parse_parquet_filename(last_import_filename)["end_timestamp"]
-    next_end_timestamp = next_start_timestamp + settings.incremental_duration
-
-    # TODO: subscribe to the SNS topic and read from it instead of polling
-
-    # download all the incrementals. loops forever
-    while True:
-        now = time.time()
-
-        if now < next_end_timestamp:
-            LOGGER.info("Sleeping until the next incremental is ready")
-            time.sleep(next_end_timestamp - now)
-
-        incremental_filename = download_incremental(
-            s3_client,
-            settings,
-            table_name,
-            next_start_timestamp,
-            incremental_bytes_downloaded_progress,
-            empty_steps_progress,
-        )
-
-        if incremental_filename is None:
-            LOGGER.debug(
-                "Next incremental for %s should be ready soon. Sleeping...", table_name
-            )
-            # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
-            # TODO: subtraact the time that it took to download the previous file
-            time.sleep(settings.incremental_duration / 2.0)
-            continue
-
-        next_start_timestamp += settings.incremental_duration
-        next_end_timestamp += settings.incremental_duration
+                LOGGER.debug(
+                    "Next incremental for %s should be ready soon. Sleeping...",
+                    table_name,
+                )
+                # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
+                time.sleep(min(60, settings.incremental_duration / 2.0))
 
         import_parquet(
             db_engine,
             table_name,
             incremental_filename,
             "incremental",
-            incremental_steps_progress,
-            empty_steps_progress,
+            progress_callbacks["incremental_steps"],
+            progress_callbacks["empty_steps"],
+            row_group_executor,
             settings,
         )
+    except Exception as e:
+        if e.args == ("cannot schedule new futures after shutdown",):
+            LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
+            return
+
+        LOGGER.exception("Exception inside sync_parquet_to_db")
+        SHUTDOWN_EVENT.set()
+        raise
+
+    return incremental_filename
 
 
 def main(settings: Settings):
-    if settings.tables:
-        tables = settings.tables.split(",")
-    else:
-        tables = ALL_TABLES
-
-    LOGGER.info("Tables: %s", ",".join(tables))
-
-    db_engine = init_db(str(settings.postgres_dsn), tables, settings)
-
-    target_dir = settings.target_dir()
-    if not target_dir.exists():
-        target_dir.mkdir(parents=True)
-
     with ExitStack() as stack:
-        # these pretty progress bars show when you run the application in an interactive terminal
-        bytes_progress = Progress(
-            *Progress.get_default_columns(),
-            DownloadColumn(),
-            TransferSpeedColumn(),
-            refresh_per_second=10,
-        )
-        steps_progress = Progress(
-            *Progress.get_default_columns(),
-            MofNCompleteColumn(),
-            refresh_per_second=10,
-        )
+        db_engine = table_executor = file_executor = row_group_executors = None
+        try:
+            if settings.tables:
+                tables = settings.tables.split(",")
+            else:
+                tables = ALL_TABLES[
+                    (settings.parquet_s3_database, settings.parquet_s3_schema)
+                ]
 
-        progress_table = Table.grid()
-        progress_table.add_row(
-            Panel.fit(
-                bytes_progress,
-                title="Bytes Downloaded",
-                border_style="green",
-                padding=(0, 0),
-            ),
-            Panel.fit(
-                steps_progress,
-                title="Steps Imported",
-                border_style="blue",
-                padding=(0, 0),
-            ),
-        )
+            LOGGER.info("Tables: %s", ",".join(tables))
 
-        # this only shows in a terminal. it does not show in docker logs
-        # TODO: send a periodic log message to show progress in docker logs
-        stack.enter_context(Live(progress_table, refresh_per_second=10))
+            db_engine = init_db(str(settings.postgres_dsn), tables, settings)
 
-        full_bytes_downloaded_id = bytes_progress.add_task("Full", total=0)
-        incremental_bytes_downloaded_id = bytes_progress.add_task(
-            "Incremental", total=0
-        )
-        full_steps_id = steps_progress.add_task("Full", total=0)
-        incremental_steps_id = steps_progress.add_task("Incremental", total=0)
-        empty_steps_id = steps_progress.add_task("Empty", total=0)
+            # TODO: test the s3 client here?
 
-        full_bytes_callback = ProgressCallback(
-            bytes_progress, full_bytes_downloaded_id, 0, PROGRESS_BYTES_LOCK
-        )
-        incremental_bytes_callback = ProgressCallback(
-            bytes_progress, incremental_bytes_downloaded_id, 0, PROGRESS_BYTES_LOCK
-        )
+            target_dir = settings.target_dir()
+            if not target_dir.exists():
+                target_dir.mkdir(parents=True)
 
-        full_steps_callback = ProgressCallback(
-            steps_progress, full_steps_id, 0, PROGRESS_CHUNKS_LOCK
-        )
-        incremental_steps_callback = ProgressCallback(
-            steps_progress, incremental_steps_id, 0, PROGRESS_CHUNKS_LOCK
-        )
-        empty_steps_callback = ProgressCallback(
-            steps_progress, empty_steps_id, 0, PROGRESS_CHUNKS_LOCK
-        )
+            # these pretty progress bars show when you run the application in an interactive terminal
+            bytes_progress = Progress(
+                *Progress.get_default_columns(),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                refresh_per_second=10,
+            )
+            steps_progress = Progress(
+                *Progress.get_default_columns(),
+                MofNCompleteColumn(),
+                refresh_per_second=10,
+            )
 
-        # do all the tables in parallel
-        table_executor = stack.enter_context(
-            ThreadPoolExecutor(max_workers=len(tables))
-        )
+            progress_table = Table.grid()
+            progress_table.add_row(
+                Panel.fit(
+                    bytes_progress,
+                    title="Bytes Downloaded",
+                    border_style="green",
+                    padding=(0, 0),
+                ),
+                Panel.fit(
+                    steps_progress,
+                    title="Steps Imported",
+                    border_style="blue",
+                    padding=(0, 0),
+                ),
+            )
 
-        table_fs = {
-            table_executor.submit(
-                sync_parquet_to_db,
-                db_engine,
-                table_name,
-                full_bytes_callback,
-                incremental_bytes_callback,
-                full_steps_callback,
-                incremental_steps_callback,
-                empty_steps_callback,
-                settings,
-            ): table_name
-            for table_name in tables
-        }
+            # this only shows in a terminal. it does not show in docker logs
+            # TODO: send a periodic log message to show progress in docker logs
+            if settings.log_format != "json":
+                stack.enter_context(Live(progress_table, refresh_per_second=10))
+                enable_progress = True
+            else:
+                enable_progress = False
 
-        # wait for importers to finish
-        # they will run forever, so this really only needs to handle exceptions
-        for future in as_completed(table_fs):
-            table_name = table_fs[future]
+            progress_callbacks = {
+                "full_bytes": ProgressCallback(
+                    bytes_progress, "Full", 0, enabled=enable_progress, value_type="Q"
+                ),
+                "incremental_bytes": ProgressCallback(
+                    bytes_progress,
+                    "Incremental",
+                    0,
+                    enabled=enable_progress,
+                    value_type="Q",
+                ),
+                "full_steps": ProgressCallback(
+                    steps_progress, "Full", 0, enabled=enable_progress
+                ),
+                "incremental_steps": ProgressCallback(
+                    steps_progress, "Incremental", 0, enabled=enable_progress
+                ),
+                "empty_steps": ProgressCallback(
+                    steps_progress, "Empty", 0, enabled=enable_progress
+                ),
+                # TODO: more progress here?
+            }
 
-            LOGGER.warning("Table %s finished. This is unexpected", table_name)
+            # do all the tables in parallel
+            # TODO: think more about what size the queues should be. we don't want to overload postgres or s3
+            table_executor = stack.enter_context(
+                ThreadPoolExecutor(max_workers=len(tables))
+            )
+            file_workers = max(2, (settings.s3_pool_size) // (len(tables) + 1))
+            file_executors = {
+                table_name: stack.enter_context(
+                    ThreadPoolExecutor(max_workers=file_workers)
+                )
+                for table_name in tables
+            }
+            row_workers = max(2, (settings.postgres_pool_size) // (len(tables) + 1))
+            row_group_executors = {
+                table_name: stack.enter_context(
+                    ThreadPoolExecutor(max_workers=row_workers)
+                )
+                for table_name in tables
+            }
 
-            # this will raise an excecption if `sync_parquet_to_db` failed
-            # the result should always be ready. no timeout is needed
-            try:
-                table_result = future.result()
+            LOGGER.info("workers: %s", extra={"row": row_workers, "file": file_workers})
 
-                # TODO: do something with `table_result`?
-                table_result
-            except Exception:
-                LOGGER.exception("Table %s failed", table_name)
+            futures = {
+                table_executor.submit(
+                    sync_parquet_to_db,
+                    db_engine,
+                    file_executors[table_name],
+                    row_group_executors[table_name],
+                    table_name,
+                    progress_callbacks,
+                    settings,
+                ): table_name
+                for table_name in tables
+            }
 
-                # TODO: raise or break?
-                raise
+            # TODO: start a thread for making sure imports are happening. if no imports for 10x the duration, force shutdown
+
+            for f in as_completed(futures):
+                table_name = futures[f]
+
+                # will raise an exception if the future ended with one
+                f.result()
+
+                # all these futures should run forever
+                # any completions are unexpected
+                raise RuntimeError("table completed. this is unexpected", table_name)
+        except KeyboardInterrupt:
+            LOGGER.info("interrupted")
+        except Exception:
+            LOGGER.exception("unhandled exception")
+
+            # TODO: i don't love this. but it seems like we need it
+            sys.exit(1)
+        finally:
+            LOGGER.info("shutting down")
+            SHUTDOWN_EVENT.set()
+
+            if table_executor is not None:
+                table_executor.shutdown(wait=False, cancel_futures=True)
+
+            if file_executor is not None:
+                file_executor.shutdown(wait=False, cancel_futures=True)
+
+            if row_group_executors is not None:
+                for executor in row_group_executors.values():
+                    executor.shutdown(wait=False, cancel_futures=True)
+
+            if db_engine is not None:
+                LOGGER.debug("disposing db engine")
+                db_engine.dispose()
 
 
 if __name__ == "__main__":
-    dotenv.load_dotenv()
+    dotenv.load_dotenv(os.getenv("ENV_FILE", ".env"))
 
     settings = Settings()
 
-    setup_logging(settings.log_level, settings.log_format)
-
-    # TODO: env vars to control logging
-    logging.getLogger("app").setLevel(logging.INFO)
-    logging.getLogger("s3transfer").setLevel(logging.INFO)
-    logging.getLogger("boto3").setLevel(logging.INFO)
-    logging.getLogger("botocore").setLevel(logging.INFO)
-    logging.getLogger("urllib3").setLevel(logging.INFO)
+    settings.initialize()
 
     if settings.interactive_debug:
         with launch_ipdb_on_exception():
