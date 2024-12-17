@@ -437,6 +437,8 @@ def maximum_parquet_age():
     return time() - 60 * 60 * 24 * 7 * 2
 
 
+# NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
+# TODO: have a helper function here that makes it easier to clean up the data
 def process_batch(
     parquet_file,
     i,
@@ -451,7 +453,28 @@ def process_batch(
 
     batch = parquet_file.read_row_group(i)
 
-    rows = batch.to_pylist()  # Direct conversion to Python-native types for sqlalchemy
+    if table.name == "profile_with_addresses":
+        # this view needs de-duping
+        data = batch.to_pydict()
+
+        # collect into a different dict so that we can remove dupes
+        rows = {
+            tuple(data[pk_col.name][i] for pk_col in primary_key_columns): {
+                col_name: data[col_name][i] for col_name in data
+            }
+            for i in range(len(batch))
+        }
+        # discard the keys
+        rows = list(rows.values())
+
+        # if len(batch) > len(rows):
+        #     LOGGER.debug(
+        #         "Dropped %s rows with duplicate primary keys",
+        #         len(batch) - len(rows),
+        #     )
+    else:
+        # Direct conversion to Python-native types for sqlalchemy
+        rows = batch.to_pylist()
 
     row_keys = rows[0].keys()
 
@@ -462,8 +485,6 @@ def process_batch(
             row[col_name] = clean_parquet_data(col_name, row[col_name])
 
     # TODO: use Abstract Base Classes to make this easy to extend
-
-    # TODO: call clean_parquet_data for each of the columns in the rows
 
     # insert or update the rows
     stmt = pg_insert(table).values(rows)
