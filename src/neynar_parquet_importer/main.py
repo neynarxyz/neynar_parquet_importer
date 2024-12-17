@@ -267,7 +267,8 @@ def download_and_import_incremental_parquet(
             if SHUTDOWN_EVENT.is_set():
                 return
 
-            if time.time() > max_wait:
+            now = time.time()
+            if now > max_wait:
                 # this is a sledge hammer. think more about this!
                 raise ValueError(
                     "Max wait exceeded",
@@ -275,6 +276,7 @@ def download_and_import_incremental_parquet(
                         "max_wait_duration": max_wait_duration,
                         "table_name": table_name,
                         "next_start_timestamp": next_start_timestamp,
+                        "now": now,
                     },
                 )
 
@@ -426,7 +428,7 @@ def main(settings: Settings):
                 for table_name in tables
             }
 
-            LOGGER.info("workers: %s", extra={"row": row_workers, "file": file_workers})
+            LOGGER.info("workers", extra={"row": row_workers, "file": file_workers})
 
             futures = {
                 table_executor.submit(
