@@ -30,7 +30,6 @@ def init_db(uri, parquet_tables, settings: Settings):
     engine = create_engine(
         uri,
         pool_size=settings.postgres_pool_size,
-        pool_reset_on_return=None,
         pool_timeout=30,
         pool_pre_ping=False,  # this slows things down too much
         pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
