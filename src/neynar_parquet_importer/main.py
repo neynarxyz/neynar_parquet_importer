@@ -269,16 +269,17 @@ def download_and_import_incremental_parquet(
 
             now = time.time()
             if now > max_wait:
-                # this is a sledge hammer. think more about this!
-                raise ValueError(
-                    "Max wait exceeded",
-                    {
-                        "max_wait_duration": max_wait_duration,
-                        "table_name": table_name,
-                        "next_start_timestamp": next_start_timestamp,
-                        "now": now,
-                    },
-                )
+                extra = {
+                    "max_wait_duration": max_wait_duration,
+                    "table_name": table_name,
+                    "next_start_timestamp": next_start_timestamp,
+                    "now": now,
+                }
+                if settings.exit_after_max_wait:
+                    # this is a sledge hammer. think more about this!
+                    raise ValueError("Max wait exceeded", extra)
+                else:
+                    LOGGER.warning("Max wait exceeded", extra=extra)
 
             incremental_filename = download_incremental(
                 s3_client,
@@ -313,7 +314,8 @@ def download_and_import_incremental_parquet(
         )
 
         # we got a file. reset max wait
-        max_wait = time.time() + max_wait_duration
+        if max_wait_duration:
+            max_wait = time.time() + max_wait_duration
     except Exception as e:
         if e.args == ("cannot schedule new futures after shutdown",):
             LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
