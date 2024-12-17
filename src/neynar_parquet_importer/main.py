@@ -24,6 +24,7 @@ from .db import (
     get_table,
     import_parquet,
     init_db,
+    raise_any_exceptions,
 )
 from .s3 import (
     download_incremental,
@@ -155,6 +156,8 @@ def sync_parquet_to_db(
         ]
         next_end_timestamp = next_start_timestamp + settings.incremental_duration
 
+        max_wait_duration = max(30, 4 * settings.incremental_duration)
+
         # download all the incrementals. loops forever
         fs = []
         while not SHUTDOWN_EVENT.is_set():
@@ -176,6 +179,8 @@ def sync_parquet_to_db(
                 else:
                     break
 
+            raise_any_exceptions(fs)
+
             mark_completed(db_engine, parquet_import_tracking, completed_filenames)
 
             # TODO: if fs is super long, what should we do?
@@ -189,6 +194,7 @@ def sync_parquet_to_db(
                         "next_end": next_end_timestamp,
                     },
                 )
+                # TODO: select on this or the shutdown signal?
                 time.sleep(next_end_timestamp - now)
 
             # TODO: spawn a task on file_executor here
@@ -199,6 +205,7 @@ def sync_parquet_to_db(
                 db_engine,
                 s3_client,
                 table_name,
+                max_wait_duration,
                 next_start_timestamp,
                 progress_callbacks,
                 row_group_executor,
@@ -218,6 +225,9 @@ def sync_parquet_to_db(
     finally:
         # this should run forever. any exit here means we should shut down the whole app
         SHUTDOWN_EVENT.set()
+
+        file_executor.shutdown(wait=False, cancel_futures=True)
+        row_group_executor.shutdown(wait=False, cancel_futures=True)
 
 
 def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
@@ -242,14 +252,24 @@ def download_and_import_incremental_parquet(
     db_engine,
     s3_client,
     table_name,
+    max_wait_duration,
     next_start_timestamp,
     progress_callbacks,
     row_group_executor,
     settings: Settings,
 ):
+    max_wait = time.time() + max_wait_duration
+
     incremental_filename = None
     try:
         while incremental_filename is None:
+            if SHUTDOWN_EVENT.is_set():
+                return
+
+            if time.time() > max_wait:
+                LOGGER.error("Max wait exceeded")
+                return
+
             incremental_filename = download_incremental(
                 s3_client,
                 settings,
@@ -281,12 +301,15 @@ def download_and_import_incremental_parquet(
             row_group_executor,
             settings,
         )
+
+        # we got a file. reset max wait
+        max_wait = time.time() + max_wait_duration
     except Exception as e:
         if e.args == ("cannot schedule new futures after shutdown",):
             LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
             return
 
-        LOGGER.exception("Exception inside sync_parquet_to_db")
+        LOGGER.exception("Exception inside download_and_import_incremental_parquet")
         SHUTDOWN_EVENT.set()
         raise
 

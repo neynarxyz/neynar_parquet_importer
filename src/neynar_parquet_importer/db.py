@@ -1,6 +1,7 @@
 from concurrent.futures import CancelledError
+import threading
 from datadog import statsd
-from functools import lru_cache
+from functools import lru_cache, wraps
 import glob
 import json
 from os import path
@@ -171,10 +172,36 @@ def clean_parquet_data(col_name, value):
     return value
 
 
-@lru_cache(maxsize=None)
+def thread_local_lru_cache(maxsize=None):
+    thread_local_data = threading.local()
+
+    def decorator(func):
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            # Create a thread-local cache if it doesn't exist
+            if not hasattr(thread_local_data, "cache"):
+                thread_local_data.cache = lru_cache(maxsize)(func)
+            return thread_local_data.cache(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
+# TODO: i think this is blocking the GIL
+@thread_local_lru_cache(maxsize=None)
 def get_table(engine, table_name):
     metadata = MetaData()
     return Table(table_name, metadata, autoload_with=engine)
+
+
+def raise_any_exceptions(fs):
+    return
+
+    # TODO: i think we want something like this, but its way too slow
+    for f in fs:
+        if f.exception() is not None:
+            f.result()
 
 
 def import_parquet(
@@ -332,8 +359,12 @@ def import_parquet(
                         f = fs.pop(0)
                     else:
                         break
+
                 (i, file_age_s, row_age_s, last_updated_at) = f.result()
+
+                raise_any_exceptions(fs)
         except CancelledError:
+            LOGGER.debug("cancelled inside import_parquet")
             return
 
         # TODO: connect inside or outside the loop?
