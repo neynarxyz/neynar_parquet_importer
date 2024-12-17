@@ -27,11 +27,11 @@ JSON_COLUMNS = [
 
 def init_db(uri, parquet_tables, settings: Settings):
     """Initialize the database with our simple schema."""
-    statement_timeout = 1000 * settings.incremental_duration * 3
+    # statement_timeout = 1000 * settings.incremental_duration * 3
 
     engine = create_engine(
         uri,
-        connect_args={"options": f"-c statement_timeout={statement_timeout}"},
+        # connect_args={"options": f"-c statement_timeout={statement_timeout}"},
         pool_reset_on_return=None,
         pool_size=settings.postgres_pool_size,
         pool_timeout=30,
