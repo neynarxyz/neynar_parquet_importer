@@ -323,7 +323,7 @@ def download_and_import_incremental_parquet(
 
         LOGGER.exception("Exception inside download_and_import_incremental_parquet")
         SHUTDOWN_EVENT.set()
-        raise
+        sys.exit(1)
 
     return incremental_filename
 
