@@ -61,8 +61,6 @@ def download_latest_full(s3_client, settings: Settings, table_name, progress_cal
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
-    LOGGER.debug("Latest full backup size: %s", latest_size_bytes)
-
     progress_callback.more_steps(latest_size_bytes)
 
     LOGGER.info("Downloading the latest full backup to %s...", local_file_path)

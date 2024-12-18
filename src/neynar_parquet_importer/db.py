@@ -499,6 +499,7 @@ def process_batch(
     stmt = pg_insert(table).values(rows)
 
     # only upsert where updated_at is newer than the existing row
+    # TODO: for some tables (like links, we need to pass a constraint here!)
     upsert_stmt = stmt.on_conflict_do_update(
         index_elements=primary_key_columns,
         set_={col: stmt.excluded[col] for col in row_keys},
