@@ -32,12 +32,11 @@ def init_db(uri, parquet_tables, settings: Settings):
     engine = create_engine(
         uri,
         # connect_args={"options": f"-c statement_timeout={statement_timeout}"},
-        pool_reset_on_return=None,
         pool_size=settings.postgres_pool_size,
         pool_timeout=30,
         pool_pre_ping=False,  # this slows things down too much
         pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
-    ).execution_options(isolation_level="AUTOCOMMIT")
+    )
 
     LOGGER.info("migrating...")
 
@@ -71,9 +70,7 @@ def init_db(uri, parquet_tables, settings: Settings):
         with open(filename, "r") as f:
             migration = text(f.read())
 
-            with engine.connect().execution_options(
-                isolation_level="READ COMMITTED"
-            ) as conn:
+            with engine.connect() as conn:
                 # set the schema if we have one configured. otherwise everything goes into "public"
                 # TODO: i don't love this. theres probably a much better way to set set the search path. i don't think this even works with autocommit either
                 if settings.postgres_schema:
