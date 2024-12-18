@@ -346,8 +346,8 @@ def import_parquet(
     update_tracking_stmt = tracking_table.update().where(
         tracking_table.c.id == tracking_id
     )
+    i = file_age_s = row_age_s = None
     while fs:
-        i = file_age_s = row_age_s = None
         if SHUTDOWN_EVENT.is_set():
             return
 
