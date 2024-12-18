@@ -461,7 +461,8 @@ def process_batch(
 
     batch = parquet_file.read_row_group(i)
 
-    if table.name == "profile_with_addresses":
+    # TODO: detect tables that need deduping automatically. i think its any that have multiple primary key col
+    if table.name in ["profile_with_addresses", "links"]:
         # this view needs de-duping
         data = batch.to_pydict()
 
