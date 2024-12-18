@@ -1,4 +1,3 @@
-import atexit
 import logging
 import os
 import sys
@@ -342,7 +341,6 @@ def main(settings: Settings):
             LOGGER.info("Tables: %s", ",".join(tables))
 
             db_engine = init_db(str(settings.postgres_dsn), tables, settings)
-            atexit.register(db_engine.dispose)
 
             # TODO: test the s3 client here?
 
@@ -458,11 +456,12 @@ def main(settings: Settings):
                 raise RuntimeError("table completed. this is unexpected", table_name)
         except KeyboardInterrupt:
             LOGGER.info("interrupted")
+            # TODO: i don't love this. but it seems like we need it
+            sys.exit(1)
         except Exception:
             LOGGER.exception("unhandled exception")
-
             # TODO: i don't love this. but it seems like we need it
-            raise
+            sys.exit(1)
         finally:
             LOGGER.info("shutting down")
             SHUTDOWN_EVENT.set()
@@ -477,6 +476,10 @@ def main(settings: Settings):
             if row_group_executors is not None:
                 for executor in row_group_executors.values():
                     executor.shutdown(wait=False, cancel_futures=True)
+
+            # we did this during atexit, but that doesn't run until after the threads finish. and we want to force stop them now
+            if db_engine is not None:
+                db_engine.dispose()
 
 
 if __name__ == "__main__":
