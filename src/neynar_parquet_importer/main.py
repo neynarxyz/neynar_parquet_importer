@@ -305,7 +305,7 @@ def download_and_import_incremental_parquet(
                 extra = {
                     "table_name": table_name,
                     "sleep_amount": sleep_amount,
-                    "next_start_timestamp": next_start_timestamp,
+                    "start_timestamp": next_start_timestamp,
                 }
 
                 LOGGER.debug(
