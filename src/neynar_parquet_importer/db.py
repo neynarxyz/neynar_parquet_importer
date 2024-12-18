@@ -353,13 +353,14 @@ def import_parquet(
 
         f = fs.pop(0)
         try:
-            while i is None:
+            while True:
                 try:
                     (i, file_age_s, row_age_s, last_updated_at) = f.result(timeout=3)
                 except TimeoutError:
                     if SHUTDOWN_EVENT.is_set():
                         return
-                    continue
+                else:
+                    break
 
             # no need to call update for every entry if a bunch are done. skip to the last finished one
             if fs:
