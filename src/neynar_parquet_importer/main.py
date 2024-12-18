@@ -323,7 +323,7 @@ def download_and_import_incremental_parquet(
 
         LOGGER.exception("Exception inside download_and_import_incremental_parquet")
         SHUTDOWN_EVENT.set()
-        sys.exit(1)
+        raise
 
     return incremental_filename
 
@@ -462,7 +462,7 @@ def main(settings: Settings):
             LOGGER.exception("unhandled exception")
 
             # TODO: i don't love this. but it seems like we need it
-            sys.exit(1)
+            raise
         finally:
             LOGGER.info("shutting down")
             SHUTDOWN_EVENT.set()
