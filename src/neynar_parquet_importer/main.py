@@ -471,7 +471,8 @@ def main(settings: Settings):
                 table_executor.shutdown(wait=False, cancel_futures=True)
 
             if file_executor is not None:
-                file_executor.shutdown(wait=False, cancel_futures=True)
+                for file_executor in file_executors.values():
+                    file_executor.shutdown(wait=False, cancel_futures=True)
 
             if row_group_executors is not None:
                 for executor in row_group_executors.values():
