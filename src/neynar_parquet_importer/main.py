@@ -189,14 +189,16 @@ def sync_parquet_to_db(
             if now < next_end_timestamp:
                 sleep_amount = next_end_timestamp - now
 
-                LOGGER.debug(
-                    "Sleeping until the next incremental is ready",
-                    extra={
-                        "table": table_name,
-                        "next_end": next_end_timestamp,
-                        "sleep_amount": sleep_amount,
-                    },
-                )
+                # # TODO: this is too verbose
+                # LOGGER.debug(
+                #     "Sleeping until the next incremental is ready",
+                #     extra={
+                #         "table": table_name,
+                #         "next_end": next_end_timestamp,
+                #         "next_start": next_start_timestamp,
+                #         "sleep_amount": sleep_amount,
+                #     },
+                # )
 
                 if SHUTDOWN_EVENT.wait(sleep_amount):
                     LOGGER.debug("Shutting down")
@@ -263,6 +265,8 @@ def download_and_import_incremental_parquet(
     row_group_executor,
     settings: Settings,
 ):
+    # as long as at least one file on this table is progressing, we are okay and shouldn't exit/warn
+    # TODO: use a shared watchdog for this table instead of having every import track its own age.
     max_wait = time.time() + max_wait_duration
 
     incremental_filename = None
@@ -296,18 +300,21 @@ def download_and_import_incremental_parquet(
 
             if incremental_filename is None:
                 # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
-                sleep_amount = min(60, settings.incremental_duration / 2.0)
+                sleep_amount = min(30, settings.incremental_duration / 2.0)
+
+                extra = {
+                    "table_name": table_name,
+                    "sleep_amount": sleep_amount,
+                    "next_start_timestamp": next_start_timestamp,
+                }
 
                 LOGGER.debug(
-                    "Next incremental should be ready soon. Sleeping",
-                    extra={
-                        "table_name": table_name,
-                        "sleep_amount": sleep_amount,
-                    },
+                    "This incremental should be ready soon. Sleeping",
+                    extra=extra,
                 )
 
                 if SHUTDOWN_EVENT.wait(sleep_amount):
-                    LOGGER.debug("Shutting down")
+                    LOGGER.debug("Shutting down", extra=extra)
                     return
 
         import_parquet(
