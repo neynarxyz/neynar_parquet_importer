@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .logger import LOGGER
 from .s3 import parse_parquet_filename
-from .settings import Settings
+from .settings import SHUTDOWN_EVENT, Settings
 
 # TODO: detect this from the table
 # arrays and json columns are stored as json in parquet because that was easier than dealing with the schema
@@ -348,6 +348,9 @@ def import_parquet(
     )
     i = file_age_s = row_age_s = None
     while fs:
+        if SHUTDOWN_EVENT.is_set():
+            return
+
         f = fs.pop(0)
         try:
             (i, file_age_s, row_age_s, last_updated_at) = f.result()
