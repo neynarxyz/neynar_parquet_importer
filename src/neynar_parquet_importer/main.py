@@ -187,15 +187,20 @@ def sync_parquet_to_db(
 
             now = time.time()
             if now < next_end_timestamp:
+                sleep_amount = next_end_timestamp - now
+
                 LOGGER.debug(
                     "Sleeping until the next incremental is ready",
                     extra={
                         "table": table_name,
                         "next_end": next_end_timestamp,
+                        "sleep_amount": sleep_amount,
                     },
                 )
-                # TODO: select on this or the shutdown signal?
-                time.sleep(next_end_timestamp - now)
+
+                if SHUTDOWN_EVENT.wait(sleep_amount):
+                    LOGGER.debug("Shutting down")
+                    return
 
             # TODO: spawn a task on file_executor here
             # TODO: have an executor for s3 and another for db?
@@ -290,16 +295,20 @@ def download_and_import_incremental_parquet(
             )
 
             if incremental_filename is None:
-                if SHUTDOWN_EVENT.is_set():
-                    LOGGER.debug("Shutting down")
-                    return
+                # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
+                sleep_amount = min(60, settings.incremental_duration / 2.0)
 
                 LOGGER.debug(
-                    "Next incremental for %s should be ready soon. Sleeping...",
-                    table_name,
+                    "Next incremental should be ready soon. Sleeping",
+                    extra={
+                        "table_name": table_name,
+                        "sleep_amount": sleep_amount,
+                    },
                 )
-                # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
-                time.sleep(min(60, settings.incremental_duration / 2.0))
+
+                if SHUTDOWN_EVENT.wait(sleep_amount):
+                    LOGGER.debug("Shutting down")
+                    return
 
         import_parquet(
             db_engine,

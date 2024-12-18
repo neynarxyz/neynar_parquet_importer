@@ -346,14 +346,20 @@ def import_parquet(
     update_tracking_stmt = tracking_table.update().where(
         tracking_table.c.id == tracking_id
     )
-    i = file_age_s = row_age_s = None
     while fs:
+        i = file_age_s = row_age_s = None
         if SHUTDOWN_EVENT.is_set():
             return
 
         f = fs.pop(0)
         try:
-            (i, file_age_s, row_age_s, last_updated_at) = f.result()
+            while i is None:
+                try:
+                    (i, file_age_s, row_age_s, last_updated_at) = f.result(timeout=3)
+                except TimeoutError:
+                    if SHUTDOWN_EVENT.is_set():
+                        return
+                    continue
 
             # no need to call update for every entry if a bunch are done. skip to the last finished one
             if fs:
@@ -363,6 +369,7 @@ def import_parquet(
                     else:
                         break
 
+                # no need for a timeout here because it is marked done
                 (i, file_age_s, row_age_s, last_updated_at) = f.result()
 
                 raise_any_exceptions(fs)
@@ -389,7 +396,7 @@ def import_parquet(
                 },
             )
 
-        # # TODO: think about this more
+        # # TODO: think about this more. it at least needs to check the shutdown event
         # if fs:
         #     sleep(1)
 
