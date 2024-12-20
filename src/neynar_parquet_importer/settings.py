@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     tables: str = ""
 
     datadog_enabled: bool = True
+    exit_after_max_wait: bool = False  # TODO: improve this more
     incremental_duration: int = Field(300, alias="npe_duration")
     interactive_debug: bool = False
     local_input_dir: Path = Path("./data/parquet")

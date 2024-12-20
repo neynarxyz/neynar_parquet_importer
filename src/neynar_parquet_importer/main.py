@@ -24,6 +24,7 @@ from .db import (
     get_table,
     import_parquet,
     init_db,
+    raise_any_exceptions,
 )
 from .s3 import (
     download_incremental,
@@ -155,6 +156,8 @@ def sync_parquet_to_db(
         ]
         next_end_timestamp = next_start_timestamp + settings.incremental_duration
 
+        max_wait_duration = max(60, 4 * settings.incremental_duration)
+
         # download all the incrementals. loops forever
         fs = []
         while not SHUTDOWN_EVENT.is_set():
@@ -176,20 +179,30 @@ def sync_parquet_to_db(
                 else:
                     break
 
+            raise_any_exceptions(fs)
+
             mark_completed(db_engine, parquet_import_tracking, completed_filenames)
 
             # TODO: if fs is super long, what should we do?
 
             now = time.time()
             if now < next_end_timestamp:
-                LOGGER.debug(
-                    "Sleeping until the next incremental is ready",
-                    extra={
-                        "table": table_name,
-                        "next_end": next_end_timestamp,
-                    },
-                )
-                time.sleep(next_end_timestamp - now)
+                sleep_amount = next_end_timestamp - now
+
+                # # TODO: this is too verbose
+                # LOGGER.debug(
+                #     "Sleeping until the next incremental is ready",
+                #     extra={
+                #         "table": table_name,
+                #         "next_end": next_end_timestamp,
+                #         "next_start": next_start_timestamp,
+                #         "sleep_amount": sleep_amount,
+                #     },
+                # )
+
+                if SHUTDOWN_EVENT.wait(sleep_amount):
+                    LOGGER.debug("Shutting down")
+                    return
 
             # TODO: spawn a task on file_executor here
             # TODO: have an executor for s3 and another for db?
@@ -199,6 +212,7 @@ def sync_parquet_to_db(
                 db_engine,
                 s3_client,
                 table_name,
+                max_wait_duration,
                 next_start_timestamp,
                 progress_callbacks,
                 row_group_executor,
@@ -218,6 +232,9 @@ def sync_parquet_to_db(
     finally:
         # this should run forever. any exit here means we should shut down the whole app
         SHUTDOWN_EVENT.set()
+
+        file_executor.shutdown(wait=False, cancel_futures=True)
+        row_group_executor.shutdown(wait=False, cancel_futures=True)
 
 
 def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
@@ -242,14 +259,36 @@ def download_and_import_incremental_parquet(
     db_engine,
     s3_client,
     table_name,
+    max_wait_duration,
     next_start_timestamp,
     progress_callbacks,
     row_group_executor,
     settings: Settings,
 ):
+    # as long as at least one file on this table is progressing, we are okay and shouldn't exit/warn
+    # TODO: use a shared watchdog for this table instead of having every import track its own age.
+    max_wait = time.time() + max_wait_duration
+
     incremental_filename = None
     try:
         while incremental_filename is None:
+            if SHUTDOWN_EVENT.is_set():
+                return
+
+            now = time.time()
+            if now > max_wait:
+                extra = {
+                    "max_wait_duration": max_wait_duration,
+                    "table_name": table_name,
+                    "next_start_timestamp": next_start_timestamp,
+                    "now": now,
+                }
+                if settings.exit_after_max_wait:
+                    # this is a sledge hammer. think more about this!
+                    raise ValueError("Max wait exceeded", extra)
+                else:
+                    LOGGER.warning("Max wait exceeded", extra=extra)
+
             incremental_filename = download_incremental(
                 s3_client,
                 settings,
@@ -260,16 +299,23 @@ def download_and_import_incremental_parquet(
             )
 
             if incremental_filename is None:
-                if SHUTDOWN_EVENT.is_set():
-                    LOGGER.debug("Shutting down")
-                    return
+                # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
+                sleep_amount = min(30, settings.incremental_duration / 2.0)
+
+                extra = {
+                    "table_name": table_name,
+                    "sleep_amount": sleep_amount,
+                    "start_timestamp": next_start_timestamp,
+                }
 
                 LOGGER.debug(
-                    "Next incremental for %s should be ready soon. Sleeping...",
-                    table_name,
+                    "This incremental should be ready soon. Sleeping",
+                    extra=extra,
                 )
-                # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
-                time.sleep(min(60, settings.incremental_duration / 2.0))
+
+                if SHUTDOWN_EVENT.wait(sleep_amount):
+                    LOGGER.debug("Shutting down", extra=extra)
+                    return
 
         import_parquet(
             db_engine,
@@ -281,12 +327,16 @@ def download_and_import_incremental_parquet(
             row_group_executor,
             settings,
         )
+
+        # we got a file. reset max wait
+        if max_wait_duration:
+            max_wait = time.time() + max_wait_duration
     except Exception as e:
         if e.args == ("cannot schedule new futures after shutdown",):
             LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
             return
 
-        LOGGER.exception("Exception inside sync_parquet_to_db")
+        LOGGER.exception("Exception inside download_and_import_incremental_parquet")
         SHUTDOWN_EVENT.set()
         raise
 
@@ -394,7 +444,7 @@ def main(settings: Settings):
                 for table_name in tables
             }
 
-            LOGGER.info("workers: %s", extra={"row": row_workers, "file": file_workers})
+            LOGGER.info("workers", extra={"row": row_workers, "file": file_workers})
 
             futures = {
                 table_executor.submit(
@@ -422,9 +472,10 @@ def main(settings: Settings):
                 raise RuntimeError("table completed. this is unexpected", table_name)
         except KeyboardInterrupt:
             LOGGER.info("interrupted")
+            # TODO: i don't love this. but it seems like we need it
+            sys.exit(1)
         except Exception:
             LOGGER.exception("unhandled exception")
-
             # TODO: i don't love this. but it seems like we need it
             sys.exit(1)
         finally:
@@ -435,14 +486,15 @@ def main(settings: Settings):
                 table_executor.shutdown(wait=False, cancel_futures=True)
 
             if file_executor is not None:
-                file_executor.shutdown(wait=False, cancel_futures=True)
+                for file_executor in file_executors.values():
+                    file_executor.shutdown(wait=False, cancel_futures=True)
 
             if row_group_executors is not None:
                 for executor in row_group_executors.values():
                     executor.shutdown(wait=False, cancel_futures=True)
 
+            # we did this during atexit, but that doesn't run until after the threads finish. and we want to force stop them now
             if db_engine is not None:
-                LOGGER.debug("disposing db engine")
                 db_engine.dispose()
 
 

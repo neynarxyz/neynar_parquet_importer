@@ -1,6 +1,7 @@
 from concurrent.futures import CancelledError
+import threading
 from datadog import statsd
-from functools import lru_cache
+from functools import lru_cache, wraps
 import glob
 import json
 from os import path
@@ -12,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .logger import LOGGER
 from .s3 import parse_parquet_filename
-from .settings import Settings
+from .settings import SHUTDOWN_EVENT, Settings
 
 # TODO: detect this from the table
 # arrays and json columns are stored as json in parquet because that was easier than dealing with the schema
@@ -26,10 +27,12 @@ JSON_COLUMNS = [
 
 def init_db(uri, parquet_tables, settings: Settings):
     """Initialize the database with our simple schema."""
+    # statement_timeout = 1000 * settings.incremental_duration * 3
+
     engine = create_engine(
         uri,
+        # connect_args={"options": f"-c statement_timeout={statement_timeout}"},
         pool_size=settings.postgres_pool_size,
-        pool_reset_on_return=None,
         pool_timeout=30,
         pool_pre_ping=False,  # this slows things down too much
         pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
@@ -67,9 +70,7 @@ def init_db(uri, parquet_tables, settings: Settings):
         with open(filename, "r") as f:
             migration = text(f.read())
 
-            with engine.connect().execution_options(
-                isolation_level="READ COMMITTED"
-            ) as conn:
+            with engine.connect() as conn:
                 # set the schema if we have one configured. otherwise everything goes into "public"
                 # TODO: i don't love this. theres probably a much better way to set set the search path. i don't think this even works with autocommit either
                 if settings.postgres_schema:
@@ -171,10 +172,36 @@ def clean_parquet_data(col_name, value):
     return value
 
 
-@lru_cache(maxsize=None)
+def thread_local_lru_cache(maxsize=None):
+    thread_local_data = threading.local()
+
+    def decorator(func):
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            # Create a thread-local cache if it doesn't exist
+            if not hasattr(thread_local_data, "cache"):
+                thread_local_data.cache = lru_cache(maxsize)(func)
+            return thread_local_data.cache(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
+# TODO: i think this is blocking the GIL
+@thread_local_lru_cache(maxsize=None)
 def get_table(engine, table_name):
     metadata = MetaData()
     return Table(table_name, metadata, autoload_with=engine)
+
+
+def raise_any_exceptions(fs):
+    return
+
+    # TODO: i think we want something like this, but its way too slow
+    for f in fs:
+        if f.exception() is not None:
+            f.result()
 
 
 def import_parquet(
@@ -321,9 +348,19 @@ def import_parquet(
     )
     i = file_age_s = row_age_s = None
     while fs:
+        if SHUTDOWN_EVENT.is_set():
+            return
+
         f = fs.pop(0)
         try:
-            (i, file_age_s, row_age_s, last_updated_at) = f.result()
+            while True:
+                try:
+                    (i, file_age_s, row_age_s, last_updated_at) = f.result(timeout=3)
+                except TimeoutError:
+                    if SHUTDOWN_EVENT.is_set():
+                        return
+                else:
+                    break
 
             # no need to call update for every entry if a bunch are done. skip to the last finished one
             if fs:
@@ -332,8 +369,13 @@ def import_parquet(
                         f = fs.pop(0)
                     else:
                         break
+
+                # no need for a timeout here because it is marked done
                 (i, file_age_s, row_age_s, last_updated_at) = f.result()
+
+                raise_any_exceptions(fs)
         except CancelledError:
+            LOGGER.debug("cancelled inside import_parquet")
             return
 
         # TODO: connect inside or outside the loop?
@@ -355,7 +397,7 @@ def import_parquet(
                 },
             )
 
-        # # TODO: think about this more
+        # # TODO: think about this more. it at least needs to check the shutdown event
         # if fs:
         #     sleep(1)
 
@@ -403,6 +445,8 @@ def maximum_parquet_age():
     return time() - 60 * 60 * 24 * 7 * 2
 
 
+# NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
+# TODO: have a helper function here that makes it easier to clean up the data
 def process_batch(
     parquet_file,
     i,
@@ -417,7 +461,29 @@ def process_batch(
 
     batch = parquet_file.read_row_group(i)
 
-    rows = batch.to_pylist()  # Direct conversion to Python-native types for sqlalchemy
+    # TODO: detect tables that need deduping automatically. i think its any that have multiple primary key col
+    if table.name in ["profile_with_addresses", "links"]:
+        # this view needs de-duping
+        data = batch.to_pydict()
+
+        # collect into a different dict so that we can remove dupes
+        rows = {
+            tuple(data[pk_col.name][i] for pk_col in primary_key_columns): {
+                col_name: data[col_name][i] for col_name in data
+            }
+            for i in range(len(batch))
+        }
+        # discard the keys
+        rows = list(rows.values())
+
+        # if len(batch) > len(rows):
+        #     LOGGER.debug(
+        #         "Dropped %s rows with duplicate primary keys",
+        #         len(batch) - len(rows),
+        #     )
+    else:
+        # Direct conversion to Python-native types for sqlalchemy
+        rows = batch.to_pylist()
 
     row_keys = rows[0].keys()
 
@@ -428,8 +494,6 @@ def process_batch(
             row[col_name] = clean_parquet_data(col_name, row[col_name])
 
     # TODO: use Abstract Base Classes to make this easy to extend
-
-    # TODO: call clean_parquet_data for each of the columns in the rows
 
     # insert or update the rows
     stmt = pg_insert(table).values(rows)
