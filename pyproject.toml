@@ -18,7 +18,7 @@ dependencies = [
     "markdown-it-py==3.0.0",
     "matplotlib-inline==0.1.7",
     "mdurl==0.1.2",
-    "numpy==2.1.1",
+    "numpy==2.2.1",
     "parso==0.8.4",
     "pexpect==4.9.0",
     "prompt-toolkit==3.0.47",
