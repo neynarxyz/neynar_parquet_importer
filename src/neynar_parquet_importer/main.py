@@ -227,14 +227,12 @@ def sync_parquet_to_db(
             LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
             return
 
-        LOGGER.exception("unhandled exception inside sync_parquet_to_db")
+        LOGGER.exception("exception inside sync_parquet_to_db")
+        SHUTDOWN_EVENT.set()
         raise
     finally:
         # this should run forever. any exit here means we should shut down the whole app
         SHUTDOWN_EVENT.set()
-
-        file_executor.shutdown(wait=False, cancel_futures=True)
-        row_group_executor.shutdown(wait=False, cancel_futures=True)
 
 
 def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
@@ -336,7 +334,7 @@ def download_and_import_incremental_parquet(
             LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
             return
 
-        LOGGER.exception("Exception inside download_and_import_incremental_parquet")
+        LOGGER.exception("exception inside download_and_import_incremental_parquet")
         SHUTDOWN_EVENT.set()
         raise
 
@@ -482,16 +480,16 @@ def main(settings: Settings):
             LOGGER.info("shutting down")
             SHUTDOWN_EVENT.set()
 
-            if table_executor is not None:
-                table_executor.shutdown(wait=False, cancel_futures=True)
+            if row_group_executors is not None:
+                for executor in row_group_executors.values():
+                    executor.shutdown(wait=False, cancel_futures=True)
 
             if file_executor is not None:
                 for file_executor in file_executors.values():
                     file_executor.shutdown(wait=False, cancel_futures=True)
 
-            if row_group_executors is not None:
-                for executor in row_group_executors.values():
-                    executor.shutdown(wait=False, cancel_futures=True)
+            if table_executor is not None:
+                table_executor.shutdown(wait=False, cancel_futures=True)
 
             # we did this during atexit, but that doesn't run until after the threads finish. and we want to force stop them now
             if db_engine is not None:
