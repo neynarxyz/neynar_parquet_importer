@@ -434,19 +434,28 @@ def main(settings: Settings):
             # do all the tables in parallel
             # TODO: think more about what size the queues should be. we don't want to overload postgres or s3
             table_executor = stack.enter_context(
-                ThreadPoolExecutor(max_workers=len(tables))
+                ThreadPoolExecutor(
+                    max_workers=len(tables),
+                    thread_name_prefix="Table",
+                )
             )
             file_workers = max(2, (settings.s3_pool_size) // (len(tables) + 1))
             file_executors = {
                 table_name: stack.enter_context(
-                    ThreadPoolExecutor(max_workers=file_workers)
+                    ThreadPoolExecutor(
+                        max_workers=file_workers,
+                        thread_name_prefix=f"{table_name}File",
+                    )
                 )
                 for table_name in tables
             }
             row_workers = max(2, (settings.postgres_pool_size) // (len(tables) + 1))
             row_group_executors = {
                 table_name: stack.enter_context(
-                    ThreadPoolExecutor(max_workers=row_workers)
+                    ThreadPoolExecutor(
+                        max_workers=row_workers,
+                        thread_name_prefix=f"{table_name}Rows",
+                    )
                 )
                 for table_name in tables
             }
