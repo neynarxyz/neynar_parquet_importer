@@ -7,9 +7,11 @@ import json
 from os import path
 import re
 from time import time
+from psycopg import OperationalError
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from .logger import LOGGER
 from .s3 import parse_parquet_filename
@@ -189,6 +191,7 @@ def thread_local_lru_cache(maxsize=None):
 
 
 # TODO: i think this is blocking the GIL
+# TODO: we should have one metadata with all the tables in it and fetch from there
 @thread_local_lru_cache(maxsize=None)
 def get_table(engine, table_name):
     metadata = MetaData()
@@ -200,10 +203,17 @@ def raise_any_exceptions(fs):
 
     # TODO: i think we want something like this, but its way too slow
     for f in fs:
+        if not f.done():
+            continue
         if f.exception() is not None:
             f.result()
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(0.2),
+    retry=retry_if_exception_type(OperationalError),
+)
 def import_parquet(
     engine,
     table_name,

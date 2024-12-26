@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 import dotenv
 from ipdb import launch_ipdb_on_exception
+from psycopg import OperationalError
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
@@ -16,6 +17,7 @@ from rich.progress import (
 )
 from rich.table import Table
 from sqlalchemy import update
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from .progress import ProgressCallback
 from .db import (
@@ -149,6 +151,8 @@ def sync_parquet_to_db(
                 settings,
             )
 
+            mark_completed(db_engine, parquet_import_tracking, [full_filename])
+
             last_import_filename = full_filename
 
         next_start_timestamp = parse_parquet_filename(last_import_filename)[
@@ -235,6 +239,11 @@ def sync_parquet_to_db(
         SHUTDOWN_EVENT.set()
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(0.2),
+    retry=retry_if_exception_type(OperationalError),
+)
 def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
     if not completed_filenames:
         return
@@ -480,16 +489,16 @@ def main(settings: Settings):
             LOGGER.info("shutting down")
             SHUTDOWN_EVENT.set()
 
-            if row_group_executors is not None:
-                for executor in row_group_executors.values():
-                    executor.shutdown(wait=False, cancel_futures=True)
+            if table_executor is not None:
+                table_executor.shutdown(wait=False, cancel_futures=True)
 
             if file_executor is not None:
                 for file_executor in file_executors.values():
                     file_executor.shutdown(wait=False, cancel_futures=True)
 
-            if table_executor is not None:
-                table_executor.shutdown(wait=False, cancel_futures=True)
+            if row_group_executors is not None:
+                for executor in row_group_executors.values():
+                    executor.shutdown(wait=False, cancel_futures=True)
 
             # we did this during atexit, but that doesn't run until after the threads finish. and we want to force stop them now
             if db_engine is not None:
