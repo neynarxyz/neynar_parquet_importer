@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 import dotenv
 from ipdb import launch_ipdb_on_exception
-from psycopg import OperationalError
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
@@ -17,12 +16,12 @@ from rich.progress import (
 )
 from rich.table import Table
 from sqlalchemy import update
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from .progress import ProgressCallback
 from .db import (
     check_for_existing_full_import,
     check_for_existing_incremental_import,
+    connect_and_execute_with_retry,
     get_table,
     import_parquet,
     init_db,
@@ -52,7 +51,7 @@ ALL_TABLES = {
         # "channels",  # TODO: schema for this coming soon!
         "fids",
         "fnames",
-        "links",
+        # "links",  # NOTE: please use the nindexer follows table instead
         # "power_users",  # TODO: schema for this coming soon!
         # "profile_with_addresses",  # TODO: `profile_with_addresses` is a view and needs some special handling for duplicate ids
         "reactions",  # NOTE: `reactions` is VERY large with LOTS of writes!
@@ -239,11 +238,6 @@ def sync_parquet_to_db(
         SHUTDOWN_EVENT.set()
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(0.2),
-    retry=retry_if_exception_type(OperationalError),
-)
 def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
     if not completed_filenames:
         return
@@ -254,9 +248,7 @@ def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
         .values(completed=True)
     )
 
-    with db_engine.connect() as conn:
-        conn.execute(stmt)
-        conn.commit()
+    return connect_and_execute_with_retry(db_engine, stmt)
 
     # this is too verbose
     # LOGGER.debug("completed", extra={"files": completed_filenames})

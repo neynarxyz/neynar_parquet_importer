@@ -11,7 +11,12 @@ from psycopg import OperationalError
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_delay,
+    wait_random,
+)
 
 from .logger import LOGGER
 from .s3 import parse_parquet_filename
@@ -209,11 +214,6 @@ def raise_any_exceptions(fs):
             f.result()
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(0.2),
-    retry=retry_if_exception_type(OperationalError),
-)
 def import_parquet(
     engine,
     table_name,
@@ -268,11 +268,7 @@ def import_parquet(
         },
     ).returning(tracking_table.c.id, tracking_table.c.last_row_group_imported)
 
-    with engine.connect() as conn:
-        # Execute the statement and fetch the result
-        result = conn.execute(upsert_stmt)
-        conn.commit()
-        row = result.fetchone()
+    row = fetchone_with_retry(engine, upsert_stmt)
 
     # Extract the id and last_row_group_imported
     tracking_id = row.id
@@ -388,10 +384,9 @@ def import_parquet(
             LOGGER.debug("cancelled inside import_parquet")
             return
 
-        # TODO: connect inside or outside the loop?
-        with engine.connect() as conn:
-            conn.execute(update_tracking_stmt.values(last_row_group_imported=i))
-            conn.commit()
+        execute_with_retry(
+            engine, update_tracking_stmt.values(last_row_group_imported=i)
+        )
 
         # TODO: metric here?
         if num_row_groups > 1:
@@ -450,6 +445,31 @@ def import_parquet(
         )
 
 
+@retry(
+    stop=stop_after_delay(30),
+    wait=wait_random(0.2, 1.0),
+    retry=retry_if_exception_type(OperationalError),
+)
+def execute_with_retry(engine, stmt):
+    with engine.connect() as conn:
+        result = conn.execute(stmt)
+        conn.commit()
+        return result
+
+
+@retry(
+    stop=stop_after_delay(30),
+    wait=wait_random(0.2, 1.0),
+    retry=retry_if_exception_type(OperationalError),
+)
+def fetchone_with_retry(engine, stmt):
+    with engine.connect() as conn:
+        result = conn.execute(stmt)
+        row = result.fetchone()
+        conn.commit()
+        return row
+
+
 def maximum_parquet_age():
     """Only 2 weeks of files are kept in s3"""
     return time() - 60 * 60 * 24 * 7 * 2
@@ -472,7 +492,7 @@ def process_batch(
     batch = parquet_file.read_row_group(i)
 
     # TODO: detect tables that need deduping automatically. i think its any that have multiple primary key col
-    if table.name in ["profile_with_addresses", "links"]:
+    if table.name in ["profile_with_addresses"]:
         # this view needs de-duping
         data = batch.to_pydict()
 
@@ -516,9 +536,7 @@ def process_batch(
         where=(stmt.excluded["updated_at"] > table.c.updated_at),
     )
 
-    with engine.connect() as conn:
-        conn.execute(upsert_stmt)
-        conn.commit()
+    execute_with_retry(engine, upsert_stmt)
 
     now = time()
 
