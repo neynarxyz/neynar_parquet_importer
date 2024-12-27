@@ -35,16 +35,19 @@ JSON_COLUMNS = [
 
 def init_db(uri, parquet_tables, settings: Settings):
     """Initialize the database with our simple schema."""
-    # statement_timeout = 1000 * settings.incremental_duration * 3
+    statement_timeout = 1000 * 15  # 15 seconds
 
     engine = create_engine(
         uri,
-        # connect_args={"options": f"-c statement_timeout={statement_timeout}"},
+        connect_args={
+            "connect_timeout": 10,
+            "options": f"-c statement_timeout={statement_timeout}",
+        },
         pool_size=settings.postgres_pool_size,
         pool_timeout=30,
         pool_pre_ping=False,  # this slows things down too much
+        pool_reset_on_return=True,
         pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
-        connect_args={"connect_timeout": 10},
     )
 
     LOGGER.info("migrating...")
@@ -362,11 +365,12 @@ def import_parquet(
         f = fs.pop(0)
         try:
             while True:
+                if SHUTDOWN_EVENT.is_set():
+                    return
                 try:
                     (i, file_age_s, row_age_s, last_updated_at) = f.result(timeout=3)
                 except TimeoutError:
-                    if SHUTDOWN_EVENT.is_set():
-                        return
+                    continue
                 else:
                     break
 
@@ -403,10 +407,6 @@ def import_parquet(
                     "last_updated_at": last_updated_at.timestamp(),
                 },
             )
-
-        # # TODO: think about this more. it at least needs to check the shutdown event
-        # if fs:
-        #     sleep(1)
 
     file_size = path.getsize(local_filename)
 
