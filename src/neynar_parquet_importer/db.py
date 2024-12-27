@@ -41,7 +41,8 @@ def init_db(uri, parquet_tables, settings: Settings):
         uri,
         connect_args={
             "connect_timeout": 10,
-            "options": f"-c statement_timeout={statement_timeout}",
+            # # TODO: this works on some servers, but others don't have permissions
+            # "options": f"-c statement_timeout={statement_timeout}",
         },
         pool_size=settings.postgres_pool_size,
         pool_timeout=30,
