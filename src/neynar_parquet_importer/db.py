@@ -7,13 +7,11 @@ import json
 from os import path
 import re
 from time import time
-from psycopg import OperationalError
 import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from tenacity import (
     retry,
-    retry_if_exception_type,
     stop_after_delay,
     wait_random,
 )
@@ -448,7 +446,6 @@ def import_parquet(
 @retry(
     stop=stop_after_delay(30),
     wait=wait_random(0.2, 1.0),
-    retry=retry_if_exception_type(OperationalError),
 )
 def execute_with_retry(engine, stmt):
     with engine.connect() as conn:
@@ -460,7 +457,6 @@ def execute_with_retry(engine, stmt):
 @retry(
     stop=stop_after_delay(30),
     wait=wait_random(0.2, 1.0),
-    retry=retry_if_exception_type(OperationalError),
 )
 def fetchone_with_retry(engine, stmt):
     with engine.connect() as conn:
