@@ -21,7 +21,7 @@ from .progress import ProgressCallback
 from .db import (
     check_for_existing_full_import,
     check_for_existing_incremental_import,
-    connect_and_execute_with_retry,
+    execute_with_retry,
     get_table,
     import_parquet,
     init_db,
@@ -248,7 +248,7 @@ def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
         .values(completed=True)
     )
 
-    return connect_and_execute_with_retry(db_engine, stmt)
+    return execute_with_retry(db_engine, stmt)
 
     # this is too verbose
     # LOGGER.debug("completed", extra={"files": completed_filenames})
