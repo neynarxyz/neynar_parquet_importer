@@ -1,4 +1,5 @@
 from concurrent.futures import CancelledError
+import logging
 import threading
 from datadog import statsd
 from functools import lru_cache, wraps
@@ -11,7 +12,9 @@ import pyarrow.parquet as pq
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from tenacity import (
+    after_log,
     retry,
+    stop_after_attempt,
     stop_after_delay,
     wait_random,
 )
@@ -41,6 +44,7 @@ def init_db(uri, parquet_tables, settings: Settings):
         pool_timeout=30,
         pool_pre_ping=False,  # this slows things down too much
         pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
+        connect_args={"connect_timeout": 10},
     )
 
     LOGGER.info("migrating...")
@@ -444,8 +448,12 @@ def import_parquet(
 
 
 @retry(
-    stop=stop_after_delay(30),
+    stop=stop_after_delay(30) | stop_after_attempt(30),
     wait=wait_random(0.2, 1.0),
+    # sleep=SHUTDOWN_EVENT.wait,
+    # before=before_log(LOGGER, logging.DEBUG),
+    after=after_log(LOGGER, logging.WARN),
+    reraise=True,
 )
 def execute_with_retry(engine, stmt):
     with engine.connect() as conn:
@@ -455,8 +463,12 @@ def execute_with_retry(engine, stmt):
 
 
 @retry(
-    stop=stop_after_delay(30),
-    wait=wait_random(0.2, 1.0),
+    stop=stop_after_delay(30) | stop_after_attempt(30),
+    wait=wait_random(0.2, 2.0),
+    # sleep=SHUTDOWN_EVENT.wait,
+    # before=before_log(LOGGER, logging.DEBUG),
+    after=after_log(LOGGER, logging.WARN),
+    reraise=True,
 )
 def fetchone_with_retry(engine, stmt):
     with engine.connect() as conn:
