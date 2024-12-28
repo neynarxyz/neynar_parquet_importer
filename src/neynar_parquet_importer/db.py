@@ -1,3 +1,4 @@
+import atexit
 from concurrent.futures import CancelledError
 import logging
 import threading
@@ -9,7 +10,7 @@ from os import path
 import re
 from time import time
 import pyarrow.parquet as pq
-from sqlalchemy import MetaData, Table, create_engine, select, text
+from sqlalchemy import MetaData, NullPool, QueuePool, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from tenacity import (
     after_log,
@@ -37,6 +38,11 @@ def init_db(uri, parquet_tables, settings: Settings):
     """Initialize the database with our simple schema."""
     statement_timeout = 1000 * 15  # 15 seconds
 
+    if settings.postgres_poolclass == "NullPool":
+        poolclass = NullPool
+    else:
+        poolclass = QueuePool
+
     engine = create_engine(
         uri,
         connect_args={
@@ -44,6 +50,8 @@ def init_db(uri, parquet_tables, settings: Settings):
             # # TODO: this works on some servers, but others don't have permissions
             # "options": f"-c statement_timeout={statement_timeout}",
         },
+        poolclass=poolclass,
+        max_overflow=settings.postgres_max_overflow,
         pool_size=settings.postgres_pool_size,
         pool_timeout=30,
         pool_pre_ping=False,  # this slows things down too much
@@ -51,9 +59,13 @@ def init_db(uri, parquet_tables, settings: Settings):
         pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
     )
 
+    atexit.register(engine.dispose)
+
     LOGGER.info("migrating...")
 
     pattern = r"schema/(?P<num>\d{3})_(?P<parquet_db_name>[a-zA-Z0-9-]+)_(?P<parquet_schema_name>[a-zA-Z0-9-]+)_(?P<parquet_table_name>[a-zA-Z0-9_]+)\.sql"
+
+    migrations = []
 
     for filename in sorted(glob.glob("schema/*.sql")):
         m = re.match(pattern, filename)
@@ -83,16 +95,23 @@ def init_db(uri, parquet_tables, settings: Settings):
         with open(filename, "r") as f:
             migration = text(f.read())
 
-            with engine.connect() as conn:
-                # set the schema if we have one configured. otherwise everything goes into "public"
-                # TODO: i don't love this. theres probably a much better way to set set the search path. i don't think this even works with autocommit either
-                if settings.postgres_schema:
-                    conn.execute(
-                        "SET search_path TO :schema_name",
-                        {"schema_name": settings.postgres_schema},
-                    )
-                conn.execute(migration)
-                conn.commit()
+            migrations.append(migration)
+
+    if not migrations:
+        raise RuntimeError("No migrations found")
+
+    with engine.connect() as conn:
+        # set the schema if we have one configured. otherwise everything goes into "public"
+        # TODO: i don't love this. theres probably a much better way to set set the search path. i don't think this even works with autocommit either
+        if settings.postgres_schema:
+            conn.execute(
+                "SET search_path TO :schema_name",
+                {"schema_name": settings.postgres_schema},
+            )
+
+        for migration in migrations:
+            conn.execute(migration)
+            conn.commit()
 
     LOGGER.info("migrations complete.")
 

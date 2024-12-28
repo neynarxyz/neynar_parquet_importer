@@ -1,9 +1,12 @@
 import logging
 import os
+import signal
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
+import traceback
 import dotenv
 from ipdb import launch_ipdb_on_exception
 from rich.live import Live
@@ -342,6 +345,33 @@ def download_and_import_incremental_parquet(
     return incremental_filename
 
 
+def queue_hard_shutdown():
+    for _ in range(10):
+        if len(threading.enumerate()) == 2:
+            LOGGER.info("no threads left. shutting down")
+            return
+
+        time.sleep(1)
+
+    LOGGER.error("hard shutdown!")
+    for thread in threading.enumerate():
+        LOGGER.error(
+            f"Thread {thread.name} (ID: {thread.ident}):\n{traceback.format_stack()}"
+        )
+
+    os.kill(0, signal.SIGKILL)
+
+
+def start_shutdown():
+    LOGGER.info("shutting down")
+
+    SHUTDOWN_EVENT.set()
+
+    # TODO: if unix, use SIGALARM?
+    if threading.current_thread() == threading.main_thread():
+        threading.Thread(target=queue_hard_shutdown).start()
+
+
 def main(settings: Settings):
     with ExitStack() as stack:
         db_engine = table_executor = file_executor = row_group_executors = None
@@ -487,8 +517,7 @@ def main(settings: Settings):
             # TODO: i don't love this. but it seems like we need it
             sys.exit(1)
         finally:
-            LOGGER.info("shutting down")
-            SHUTDOWN_EVENT.set()
+            start_shutdown()
 
             if table_executor is not None:
                 table_executor.shutdown(wait=False, cancel_futures=True)
@@ -500,10 +529,6 @@ def main(settings: Settings):
             if row_group_executors is not None:
                 for executor in row_group_executors.values():
                     executor.shutdown(wait=False, cancel_futures=True)
-
-            # we did this during atexit, but that doesn't run until after the threads finish. and we want to force stop them now
-            if db_engine is not None:
-                db_engine.dispose()
 
 
 if __name__ == "__main__":
