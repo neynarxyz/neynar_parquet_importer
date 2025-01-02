@@ -39,25 +39,32 @@ def init_db(uri, parquet_tables, settings: Settings):
     statement_timeout = 1000 * 15  # 15 seconds
 
     if settings.postgres_poolclass == "NullPool":
-        poolclass = NullPool
-    else:
-        poolclass = QueuePool
+        engine = create_engine(
+            uri,
+            connect_args={
+                "connect_timeout": 10,
+                # # TODO: this works on some servers, but others don't have permissions
+                # "options": f"-c statement_timeout={statement_timeout}",
+            },
+            poolclass=NullPool,
+        )
 
-    engine = create_engine(
-        uri,
-        connect_args={
-            "connect_timeout": 10,
-            # # TODO: this works on some servers, but others don't have permissions
-            # "options": f"-c statement_timeout={statement_timeout}",
-        },
-        poolclass=poolclass,
-        max_overflow=settings.postgres_max_overflow,
-        pool_size=settings.postgres_pool_size,
-        pool_timeout=30,
-        pool_pre_ping=False,  # this slows things down too much
-        pool_reset_on_return=True,
-        pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
-    )
+    else:
+        engine = create_engine(
+            uri,
+            connect_args={
+                "connect_timeout": 10,
+                # # TODO: this works on some servers, but others don't have permissions
+                # "options": f"-c statement_timeout={statement_timeout}",
+            },
+            poolclass=QueuePool,
+            max_overflow=settings.postgres_max_overflow,
+            pool_size=settings.postgres_pool_size,
+            pool_timeout=30,
+            pool_pre_ping=False,  # this slows things down too much
+            pool_reset_on_return=True,
+            pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
+        )
 
     atexit.register(engine.dispose)
 
