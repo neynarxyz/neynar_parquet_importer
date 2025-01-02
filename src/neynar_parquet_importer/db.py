@@ -274,12 +274,11 @@ def import_parquet(
         num_row_groups = 0
         # TODO: maybe have an option to return here instead of saving the ".empty" into the database
     else:
-        if path.getsize(local_filename) == 0:
-            raise ValueError(
-                f"{local_filename} has a size of 0! this should be impossible"
-            )
+        try:
+            parquet_file = pq.ParquetFile(local_filename)
+        except Exception as e:
+            raise ValueError("Failed to read parquet file", local_filename, e)
 
-        parquet_file = pq.ParquetFile(local_filename)
         num_row_groups = parquet_file.num_row_groups
 
     # Do NOT put 0 here. That would mean that we already imported row group 0!
