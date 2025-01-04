@@ -27,21 +27,23 @@ def parse_parquet_filename(filename):
 def download_latest_full(s3_client, settings: Settings, table_name, progress_callback):
     s3_prefix = settings.parquet_s3_prefix() + "full/"
 
+    full_prefix = s3_prefix + f"{settings.parquet_s3_schema}-{table_name}-0-"
+
     paginator = s3_client.get_paginator("list_objects_v2")
-    operation_parameters = {
-        "Bucket": settings.parquet_s3_bucket,
-        "Prefix": s3_prefix + f"{settings.parquet_s3_schema}-{table_name}-0-",
-    }
+    operation_parameters = {"Bucket": settings.parquet_s3_bucket, "Prefix": full_prefix}
     page_iterator = paginator.paginate(**operation_parameters)
     latest_file = None
     for response in page_iterator:
-        response_latest_file = max(response["Contents"], key=lambda x: x["Key"])
+        response_latest_file = max(response.get("Contents", []), key=lambda x: x["Key"])
 
         if latest_file is None:
             latest_file = response_latest_file
         else:
             if response_latest_file["Key"] > latest_file["Key"]:
                 latest_file = response_latest_file
+
+    if latest_file is None:
+        raise ValueError("No full backups found for table", full_prefix)
 
     LOGGER.debug("Latest full backup: %s", latest_file)
 
