@@ -5,6 +5,8 @@ import boto3
 import botocore.exceptions
 from botocore.config import Config
 
+from neynar_parquet_importer.progress import ProgressCallback
+
 from .logger import LOGGER
 from .settings import Settings
 
@@ -71,9 +73,11 @@ def download_latest_full(s3_client, settings: Settings, table_name, progress_cal
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
+    # TODO: split this here into a "find_latest_full" function and a "download_full" function
     progress_callback.more_steps(latest_size_bytes)
 
     LOGGER.info("Downloading the latest full backup to %s...", local_file_path)
+    # TODO: download to a temporary directory so that we can resume if it partially exists
     s3_client.download_file(
         settings.parquet_s3_bucket,
         s3_prefix + full_name,
@@ -89,8 +93,8 @@ def download_incremental(
     settings: Settings,
     tablename,
     start_timestamp,
-    progress_callback,
-    empty_callback,
+    bytes_downloaded_progress: ProgressCallback,
+    empty_steps_progress: ProgressCallback,
 ):
     """Returns None if the file doesn't exist"""
     end_timestamp = start_timestamp + settings.incremental_duration
@@ -99,6 +103,7 @@ def download_incremental(
         f"{settings.parquet_s3_schema}-{tablename}-{start_timestamp}-{end_timestamp}"
     )
 
+    prefix_name = f"{incremental_name}."
     parquet_name = f"{incremental_name}.parquet"
     empty_name = f"{incremental_name}.empty"
 
@@ -122,50 +127,43 @@ def download_incremental(
     incremental_s3_prefix = settings.parquet_s3_prefix() + "incremental/"
 
     # Try downloading with ".parquet" extension first
-    # TODO: one s3_client command to get both .parquet and .empty? and maybe even the .schema?
-    try:
-        # TODO: get filesize before downloading for the progress bar
-        latest_size_bytes = s3_client.head_object(
-            Bucket=settings.parquet_s3_bucket,
-            Key=incremental_s3_prefix + parquet_name,
-        )["ContentLength"]
 
-        progress_callback.more_steps(latest_size_bytes)
+    # get filesize before downloading for the progress bar
+    response = s3_client.list_objects_v2(
+        Bucket=settings.parquet_s3_bucket,
+        Prefix=incremental_s3_prefix + prefix_name,
+    )
 
-        # TODO: callback on this download to update the progress bar
-        s3_client.download_file(
-            settings.parquet_s3_bucket,
-            incremental_s3_prefix + parquet_name,
-            local_parquet_path,
-            Callback=progress_callback,
-        )
-        LOGGER.info("Downloaded: %s", local_parquet_path)
+    contents = response.get("Contents", [])
 
-        return local_parquet_path
-    except botocore.exceptions.ClientError as e:
-        if e.response["Error"]["Code"] == "404":
-            pass
-        else:
-            raise
+    if not contents:
+        LOGGER.info("No files found: %s", incremental_s3_prefix + prefix_name)
+        return None
 
-    # If ".parquet" file doesn't exist, check for ".empty"
-    # we don't actually download it because it's empty
-    try:
-        s3_client.head_object(
-            Bucket=settings.parquet_s3_bucket,
-            Key=incremental_s3_prefix + empty_name,
-        )["ContentLength"]
+    if len(contents) > 1:
+        raise ValueError("Multiple files found", contents)
 
-        empty_callback.more_steps(1)
+    head_object = contents[0]
 
+    latest_size_bytes = head_object["Size"]
+
+    if latest_size_bytes == 0:
+        # we should probably check the name, but this seems fine
+        empty_steps_progress.more_steps(1)
         return local_empty_path
-    except botocore.exceptions.ClientError as e:
-        if e.response["Error"]["Code"] == "404":
-            pass
-        else:
-            raise
 
-    return None
+    bytes_downloaded_progress.more_steps(latest_size_bytes)
+
+    # TODO: resumable downloads using the same helper function that we use for full backups
+    s3_client.download_file(
+        settings.parquet_s3_bucket,
+        incremental_s3_prefix + parquet_name,
+        local_parquet_path,
+        Callback=bytes_downloaded_progress,
+    )
+    LOGGER.info("Downloaded: %s", local_parquet_path)
+
+    return local_parquet_path
 
 
 def get_s3_client(settings: Settings):

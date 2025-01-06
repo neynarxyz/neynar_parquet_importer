@@ -135,7 +135,7 @@ def sync_parquet_to_db(
             )
 
             # TODO: spawn this so we can check for incrementals while this is downloading
-            # TODO: need to be sure we handle "mark_completed" properly
+            # TODO: if we spawn this, we need to be sure we handle "mark_completed" properly. right now we would skip to incrementals
             if full_filename is None or not os.path.exists(full_filename):
                 # if no full export, download the latest one
                 full_filename = download_latest_full(
