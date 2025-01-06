@@ -514,7 +514,7 @@ def main(settings: Settings):
             # TODO: i don't love this. but it seems like we need it
             sys.exit(1)
         except Exception:
-            LOGGER.exception("unhandled exception")
+            LOGGER.exception("exiting because of exception")
             # TODO: i don't love this. but it seems like we need it
             sys.exit(1)
         finally:

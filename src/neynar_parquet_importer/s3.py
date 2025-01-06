@@ -37,7 +37,12 @@ def download_latest_full(s3_client, settings: Settings, table_name, progress_cal
     page_iterator = paginator.paginate(**operation_parameters)
     latest_file = None
     for response in page_iterator:
-        response_latest_file = max(response.get("Contents", []), key=lambda x: x["Key"])
+        contents = response.get("Contents", [])
+
+        if not contents:
+            break
+
+        response_latest_file = max(contents, key=lambda x: x["Key"])
 
         if latest_file is None:
             latest_file = response_latest_file
