@@ -51,7 +51,7 @@ ALL_TABLES = {
         "casts",  # NOTE: `casts` is VERY large with LOTS of writes!
         "channel_follows",
         "channel_members",
-        # "channels",  # TODO: schema for this coming soon!
+        "channels",
         "fids",
         "fnames",
         # "links",  # NOTE: please use the nindexer follows table instead

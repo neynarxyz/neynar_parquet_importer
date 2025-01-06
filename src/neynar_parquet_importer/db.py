@@ -25,11 +25,13 @@ from .s3 import parse_parquet_filename
 from .settings import SHUTDOWN_EVENT, Settings
 
 # TODO: detect this from the table
+# TODO: this should be a dict of table names to column names
 # arrays and json columns are stored as json in parquet because that was easier than dealing with the schema
 JSON_COLUMNS = [
     "embeds",
     "mentions",
     "mentions_positions",
+    "moderator_fids",
     "verified_addresses",
 ]
 
