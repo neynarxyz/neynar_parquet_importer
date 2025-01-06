@@ -46,16 +46,16 @@ LOGGER = logging.getLogger("app")
 ALL_TABLES = {
     # for these, set `npe_version=v2` `parquet_s3_schema=farcaster` `incremental_duration=300`
     ("public-postgres", "farcaster"): [
-        # "account_verifications",  # TODO: schema for this coming soon!
+        "account_verifications",
         "blocks",
         "casts",  # NOTE: `casts` is VERY large with LOTS of writes!
-        # "channel_follows",  # TODO: schema for this coming soon!
-        # "channel_members",  # TODO: schema for this coming soon!
+        "channel_follows",
+        "channel_members",
         # "channels",  # TODO: schema for this coming soon!
         "fids",
         "fnames",
         # "links",  # NOTE: please use the nindexer follows table instead
-        # "power_users",  # TODO: schema for this coming soon!
+        "power_users",
         # "profile_with_addresses",  # TODO: `profile_with_addresses` is a view and needs some special handling for duplicate ids
         "reactions",  # NOTE: `reactions` is VERY large with LOTS of writes!
         "signers",

@@ -480,16 +480,16 @@ def import_parquet(
 
 def sleep_or_raise_shutdown(t):
     if SHUTDOWN_EVENT.wait(t):
-        raise RuntimeError("shutting down after sleep")
+        raise RuntimeError("shutting down instead of sleeping")
 
 
-@retry(
-    stop=stop_after_delay(30) | stop_after_attempt(30),
-    wait=wait_random(0.2, 1.0),
-    sleep=sleep_or_raise_shutdown,
-    # before=before_log(LOGGER, logging.DEBUG),
-    after=after_log(LOGGER, logging.WARN),
-)
+# @retry(
+#     stop=stop_after_delay(30) | stop_after_attempt(30),
+#     wait=wait_random(0.2, 1.0),
+#     sleep=sleep_or_raise_shutdown,
+#     # before=before_log(LOGGER, logging.DEBUG),
+#     after=after_log(LOGGER, logging.WARN),
+# )
 def execute_with_retry(engine, stmt):
     with engine.connect() as conn:
         result = conn.execute(stmt)
