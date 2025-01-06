@@ -480,7 +480,7 @@ def import_parquet(
 
 def sleep_or_raise_shutdown(t):
     if SHUTDOWN_EVENT.wait(t):
-        raise RuntimeError("shutting down")
+        raise RuntimeError("shutting down after sleep")
 
 
 @retry(

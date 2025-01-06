@@ -207,7 +207,7 @@ def sync_parquet_to_db(
                 # )
 
                 if SHUTDOWN_EVENT.wait(sleep_amount):
-                    LOGGER.debug("Shutting down")
+                    LOGGER.debug("shutting down sync_parquet_to_db for %s", table_name)
                     return
 
             # TODO: spawn a task on file_executor here
@@ -316,7 +316,10 @@ def download_and_import_incremental_parquet(
                 )
 
                 if SHUTDOWN_EVENT.wait(sleep_amount):
-                    LOGGER.debug("Shutting down", extra=extra)
+                    LOGGER.debug(
+                        "shutting down during download_and_import_incremental_parquet",
+                        extra=extra,
+                    )
                     return
 
         import_parquet(
@@ -349,7 +352,7 @@ def queue_hard_shutdown():
     # TODO: use a threading.Timer and have a watchdog thread that checks for no progress
     for _ in range(10):
         if len(threading.enumerate()) == 2:
-            LOGGER.info("no threads left. shutting down")
+            LOGGER.info("no threads left. shutting down successfully")
             return
 
         time.sleep(1)
@@ -364,7 +367,7 @@ def queue_hard_shutdown():
 
 
 def start_shutdown():
-    LOGGER.info("shutting down")
+    LOGGER.info("starting to shut down")
 
     SHUTDOWN_EVENT.set()
 
