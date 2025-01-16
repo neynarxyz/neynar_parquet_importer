@@ -11,9 +11,9 @@ CREATE TABLE IF NOT EXISTS parquet_import_tracking (
     total_row_groups INT NOT NULL
 );
 
--- Add new columns to parquet_import_tracking if they don't already exist
 DO $$
 BEGIN
+    -- Add new columns to parquet_import_tracking if they don't already exist
     IF NOT EXISTS (
         SELECT 1
         FROM information_schema.columns
@@ -26,7 +26,3 @@ BEGIN
         ALTER COLUMN completed SET DEFAULT FALSE;
     END IF;
 END $$;
-
-CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_table_name_and_version ON parquet_import_tracking(table_name, file_version, file_duration_s);
-CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_file_type ON parquet_import_tracking(file_type);
-CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_imported_at ON parquet_import_tracking(imported_at);

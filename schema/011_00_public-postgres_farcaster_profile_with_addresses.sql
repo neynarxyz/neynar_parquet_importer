@@ -8,5 +8,3 @@ CREATE TABLE IF NOT EXISTS profile_with_addresses
     verified_addresses JSONB NOT NULL,
     updated_at timestamp without time zone NOT NULL
 );
-
--- TODO: add indexes to the tables as needed

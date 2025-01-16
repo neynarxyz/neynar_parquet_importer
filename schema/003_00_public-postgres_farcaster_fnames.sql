@@ -9,5 +9,3 @@ CREATE TABLE IF NOT EXISTS fnames
     deleted_at timestamp without time zone,
     CONSTRAINT fnames_pkey PRIMARY KEY (fname)
 );
-
--- TODO: add indexes to the tables as needed

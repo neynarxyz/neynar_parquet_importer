@@ -4,6 +4,8 @@ Globals and helpers that are used across the app. You shouldn't need to modify a
 
 from multiprocessing import Value
 
+from neynar_parquet_importer.settings import SHUTDOWN_EVENT
+
 
 class ProgressCallback:
     """Helper class for updating the progress bars in a thread-safe way."""
@@ -19,6 +21,9 @@ class ProgressCallback:
         """This needs to be compatible with how boto does it's callbacks."""
         if self.enabled:
             self.progress.update(self.task_id, advance=advance)
+
+        if SHUTDOWN_EVENT.is_set():
+            raise ValueError("Shutting down during progress update")
 
     def more_steps(self, more_steps):
         if self.enabled:

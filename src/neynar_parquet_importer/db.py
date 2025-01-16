@@ -54,6 +54,7 @@ def init_db(uri, parquet_tables, settings: Settings):
     else:
         engine = create_engine(
             uri,
+            echo=False,
             connect_args={
                 "connect_timeout": 10,
                 # # TODO: this works on some servers, but others don't have permissions
@@ -72,7 +73,7 @@ def init_db(uri, parquet_tables, settings: Settings):
 
     LOGGER.info("migrating...")
 
-    pattern = r"schema/(?P<num>\d{3})_(?P<parquet_db_name>[a-zA-Z0-9-]+)_(?P<parquet_schema_name>[a-zA-Z0-9-]+)_(?P<parquet_table_name>[a-zA-Z0-9_]+)\.sql"
+    pattern = r"schema/(?P<num>\d+)_(?P<sub_num>\d+)_(?P<parquet_db_name>[a-zA-Z0-9-]+)_(?P<parquet_schema_name>[a-zA-Z0-9-]+)_(?P<parquet_table_name>[a-zA-Z0-9_]+)\.sql"
 
     migrations = []
 
@@ -109,18 +110,18 @@ def init_db(uri, parquet_tables, settings: Settings):
     if not migrations:
         raise RuntimeError("No migrations found")
 
-    with engine.connect() as conn:
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         # set the schema if we have one configured. otherwise everything goes into "public"
         # TODO: i don't love this. theres probably a much better way to set set the search path. i don't think this even works with autocommit either
-        if settings.postgres_schema:
+        if settings.postgres_schema and settings.postgres_schema != "public":
             conn.execute(
                 "SET search_path TO :schema_name",
                 {"schema_name": settings.postgres_schema},
             )
 
         for migration in migrations:
+            LOGGER.debug("applying", extra={"migration": str(migration)})
             conn.execute(migration)
-            conn.commit()
 
     LOGGER.info("migrations complete.")
 
@@ -499,13 +500,13 @@ def execute_with_retry(engine, stmt):
         return result
 
 
-@retry(
-    stop=stop_after_delay(30) | stop_after_attempt(30),
-    wait=wait_random(0.2, 2.0),
-    sleep=sleep_or_raise_shutdown,
-    # before=before_log(LOGGER, logging.DEBUG),
-    after=after_log(LOGGER, logging.WARN),
-)
+# @retry(
+#     stop=stop_after_delay(30) | stop_after_attempt(30),
+#     wait=wait_random(0.2, 2.0),
+#     sleep=sleep_or_raise_shutdown,
+#     # before=before_log(LOGGER, logging.DEBUG),
+#     after=after_log(LOGGER, logging.WARN),
+# )
 def fetchone_with_retry(engine, stmt):
     with engine.connect() as conn:
         result = conn.execute(stmt)

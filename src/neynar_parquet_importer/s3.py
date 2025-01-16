@@ -137,7 +137,7 @@ def download_incremental(
     contents = response.get("Contents", [])
 
     if not contents:
-        LOGGER.info("No files found: %s", incremental_s3_prefix + prefix_name)
+        LOGGER.debug("No files found: %s", incremental_s3_prefix + prefix_name)
         return None
 
     if len(contents) > 1:

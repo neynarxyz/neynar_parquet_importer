@@ -352,14 +352,14 @@ def queue_hard_shutdown():
     # TODO: use a threading.Timer and have a watchdog thread that checks for no progress
     for _ in range(10):
         if len(threading.enumerate()) == 2:
-            LOGGER.info("no threads left. shutting down successfully")
+            LOGGER.info("no threads left. shutting down cleanly")
             return
 
         time.sleep(1)
 
     LOGGER.error("hard shutdown!")
     for thread in threading.enumerate():
-        LOGGER.error(
+        LOGGER.warning(
             f"Thread {thread.name} (ID: {thread.ident}):\n{traceback.format_stack()}"
         )
 
