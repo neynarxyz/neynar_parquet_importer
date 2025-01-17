@@ -1,0 +1,3 @@
+-- TODO: make sure nindexer profiles and verifications exist
+-- TODO: create a view if it doesn't already exist
+-- TODO: make the migrations code able to handle views

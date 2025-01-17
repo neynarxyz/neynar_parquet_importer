@@ -7,5 +7,3 @@ CREATE TABLE IF NOT EXISTS fids
     registered_at timestamp with time zone,
     CONSTRAINT fids_pkey PRIMARY KEY (fid)
 );
-
--- TODO: add indexes to the tables as needed

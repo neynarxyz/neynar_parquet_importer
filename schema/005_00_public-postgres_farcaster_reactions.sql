@@ -10,8 +10,22 @@ CREATE TABLE IF NOT EXISTS reactions
     "hash" bytea NOT NULL,
     target_hash bytea,
     target_fid bigint,
-    target_url text COLLATE pg_catalog."default",
-    CONSTRAINT reactions_hash_unique UNIQUE (hash)
+    target_url text COLLATE pg_catalog."default"
 );
+
+DO $$
+BEGIN
+    -- Check if the constraint exists
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'reactions'
+          AND constraint_name = 'reactions_hash_unique'
+          AND constraint_type = 'UNIQUE'
+    ) THEN
+        -- Drop the constraint
+        ALTER TABLE reactions DROP CONSTRAINT reactions_hash_unique;
+    END IF;
+END $$;
 
 -- TODO: add indexes to the tables as needed

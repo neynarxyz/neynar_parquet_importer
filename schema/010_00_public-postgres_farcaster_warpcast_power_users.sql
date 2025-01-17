@@ -5,5 +5,3 @@ CREATE TABLE IF NOT EXISTS warpcast_power_users
     updated_at timestamp without time zone NOT NULL,
     deleted_at timestamp without time zone
 );
-
--- TODO: add indexes to the tables as needed

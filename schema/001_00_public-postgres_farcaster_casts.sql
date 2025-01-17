@@ -19,4 +19,18 @@ CREATE TABLE IF NOT EXISTS casts
     CONSTRAINT casts_hash_unique UNIQUE (hash)
 );
 
--- TODO: add indexes to the tables as needed
+DO $$
+BEGIN
+    -- Check if the constraint exists
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'casts'
+          AND constraint_name = 'casts_hash_unique'
+          AND constraint_type = 'UNIQUE'
+    ) THEN
+        -- Drop the constraint
+        ALTER TABLE casts DROP CONSTRAINT casts_hash_unique;
+    END IF;
+END $$;
+

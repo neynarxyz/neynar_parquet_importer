@@ -10,8 +10,22 @@ CREATE TABLE IF NOT EXISTS signers
     custody_address bytea,
     signer bytea NOT NULL,
     "name" text COLLATE pg_catalog."default",
-    app_fid bigint,
-    CONSTRAINT unique_timestamp_fid_signer UNIQUE ("timestamp", fid, signer)
+    app_fid bigint
 );
+
+DO $$
+BEGIN
+    -- Check if the constraint exists
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'signers'
+          AND constraint_name = 'unique_timestamp_fid_signer'
+          AND constraint_type = 'UNIQUE'
+    ) THEN
+        -- Drop the constraint
+        ALTER TABLE signers DROP CONSTRAINT unique_timestamp_fid_signer;
+    END IF;
+END $$;
 
 -- TODO: add indexes to the tables as needed

@@ -1,9 +1,10 @@
-CREATE TABLE IF NOT EXISTS neynar_user_scores
+CREATE TABLE IF NOT EXISTS follows
 (
     id UUID PRIMARY KEY,
-    fid bigint NOT NULL UNIQUE,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp without time zone,
-    score real NOT NULL
+    "timestamp" timestamp without time zone NOT NULL,
+    fid bigint NOT NULL,
+    target_fid bigint NOT NULL
 );
