@@ -3,7 +3,7 @@
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.views WHERE table_name = 'combined_account_profiles') THEN
-        CREATE VIEW profile_with_verifications AS
+        CREATE VIEW profiles_with_verifications AS
         SELECT 
             p.id AS profile_id,
             p.created_at AS profile_created_at,
