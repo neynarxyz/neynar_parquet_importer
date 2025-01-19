@@ -287,9 +287,15 @@ def download_and_import_incremental_parquet(
                 }
                 if settings.exit_after_max_wait:
                     # this is a sledge hammer. think more about this!
-                    raise ValueError("Max wait exceeded", extra)
+                    raise ValueError(
+                        "Max wait exceeded. No parquet files were imported recently",
+                        extra,
+                    )
                 else:
-                    LOGGER.warning("Max wait exceeded", extra=extra)
+                    LOGGER.warning(
+                        "Max wait exceeded. No parquet files were imported recently",
+                        extra=extra,
+                    )
 
             incremental_filename = download_incremental(
                 s3_client,
