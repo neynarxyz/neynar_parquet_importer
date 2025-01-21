@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     postgres_max_overflow: int = 10
     postgres_poolclass: str = "QueuePool"
     postgres_pool_size: int = 50
-    postgres_schema: Optional[str] = None
+    postgres_schema: str = "public"
     s3_pool_size: int = 100
     target_name: str = "unknown"
 

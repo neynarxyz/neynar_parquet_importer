@@ -106,7 +106,9 @@ def init_db(uri, parquet_tables, settings: Settings):
         LOGGER.info("Applying %s", filename)
 
         with open(filename, "r") as f:
-            migration = text(f.read())
+            migration = text(
+                f.read().replace("${POSTGRES_SCHEMA}", settings.postgres_schema)
+            )
 
             migrations.append(migration)
 
@@ -115,15 +117,23 @@ def init_db(uri, parquet_tables, settings: Settings):
 
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         # set the schema if we have one configured. otherwise everything goes into "public"
-        # TODO: i don't love this. theres probably a much better way to set set the search path. i don't think this even works with autocommit either
         if settings.postgres_schema and settings.postgres_schema != "public":
-            schema_query = text(f"SET search_path TO {settings.postgres_schema};")
-            conn.execute(schema_query)
-
+            # TODO: make this optional
             create_query = text(
                 f"CREATE SCHEMA IF NOT EXISTS {settings.postgres_schema};"
             )
             conn.execute(create_query)
+
+            # # TODO: make this optional
+            # alter_query = text(
+            #     f"ALTER USER your-user set SEARCH_PATH = '{settings.postgres_schema}';"
+            # )
+            # conn.execute(alter_query)
+
+            # TODO: i don't love this. theres probably a much better way to set set the search path
+            # TODO: i think we need to replace custom schema in the .sql files
+            schema_query = text(f"SET search_path TO {settings.postgres_schema};")
+            conn.execute(schema_query)
 
         for migration in migrations:
             LOGGER.debug("applying", extra={"migration": str(migration)})

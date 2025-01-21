@@ -1,7 +1,7 @@
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.views WHERE table_name = 'profiles_with_verifications') THEN
-        CREATE VIEW farcaster.profiles_with_verifications AS
+        CREATE VIEW ${POSTGRES_SCHEMA}.profiles_with_verifications AS
         SELECT 
             p.id AS profile_id,
             p.created_at AS profile_created_at,
@@ -16,6 +16,7 @@ BEGIN
             p."location",
             p.latitude,
             p.longitude,
+            -- TODO: this table is in the old schema so you need two processes
             -- (
             --     SELECT jsonb_agg(
             --         jsonb_build_object(
