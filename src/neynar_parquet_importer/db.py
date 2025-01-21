@@ -54,6 +54,7 @@ def init_db(uri, parquet_tables, settings: Settings):
     else:
         engine = create_engine(
             uri,
+            # TODO: make this a setting
             echo=False,
             connect_args={
                 "connect_timeout": 10,
@@ -77,6 +78,8 @@ def init_db(uri, parquet_tables, settings: Settings):
 
     migrations = []
 
+    parquet_tables_and_views = parquet_tables + settings.views.split(",")
+
     for filename in sorted(glob.glob("schema/*.sql")):
         m = re.match(pattern, filename)
 
@@ -90,7 +93,7 @@ def init_db(uri, parquet_tables, settings: Settings):
             elif (
                 parts["parquet_db_name"] == settings.parquet_s3_database
                 and parts["parquet_schema_name"] == settings.parquet_s3_schema
-                and parts["parquet_table_name"] in parquet_tables
+                and parts["parquet_table_name"] in parquet_tables_and_views
             ):
                 pass
             else:
@@ -114,10 +117,13 @@ def init_db(uri, parquet_tables, settings: Settings):
         # set the schema if we have one configured. otherwise everything goes into "public"
         # TODO: i don't love this. theres probably a much better way to set set the search path. i don't think this even works with autocommit either
         if settings.postgres_schema and settings.postgres_schema != "public":
-            conn.execute(
-                "SET search_path TO :schema_name",
-                {"schema_name": settings.postgres_schema},
+            schema_query = text(f"SET search_path TO {settings.postgres_schema};")
+            conn.execute(schema_query)
+
+            create_query = text(
+                f"CREATE SCHEMA IF NOT EXISTS {settings.postgres_schema};"
             )
+            conn.execute(create_query)
 
         for migration in migrations:
             LOGGER.debug("applying", extra={"migration": str(migration)})

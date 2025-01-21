@@ -16,6 +16,7 @@ SHUTDOWN_EVENT = threading.Event()
 class Settings(BaseSettings):
     # TODO: whats the best way to take a comma seperated list of tables and convert it to a set? <https://github.com/pydantic/pydantic-settings/issues/291>
     tables: str = ""
+    views: str = ""
 
     datadog_enabled: bool = True
     exit_after_max_wait: bool = False  # TODO: improve this more
