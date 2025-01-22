@@ -150,7 +150,9 @@ def check_for_existing_incremental_import(engine, settings: Settings, table_name
     """Returns the filename for the newest incremental. This may only be partially imported."""
 
     parquet_import_tracking = get_table(
-        engine, "parquet_import_tracking", schema=settings.postgres_schema
+        engine,
+        settings.postgres_schema,
+        "parquet_import_tracking",
     )
 
     # TODO: make this much smarter. it needs to find the last one that was fully imported. there might be holes if we run things in parallel!
@@ -192,7 +194,9 @@ def check_for_existing_full_import(engine, settings: Settings, table_name):
     """Returns the filename of the newest full import (there should really only be one). This may only be partially imported."""
 
     parquet_import_tracking = get_table(
-        engine, "parquet_import_tracking", schema=settings.postgres_schema
+        engine,
+        settings.postgres_schema,
+        "parquet_import_tracking",
     )
 
     stmt = (
@@ -255,7 +259,7 @@ def thread_local_lru_cache(maxsize=None):
 # TODO: i think this is blocking the GIL
 # TODO: we should have one metadata with all the tables in it and fetch from there
 @thread_local_lru_cache(maxsize=None)
-def get_table(engine, table_name, schema=None):
+def get_table(engine, schema, table_name):
     LOGGER.debug("get_table", extra={"table_name": table_name, "schema": schema})
 
     metadata = MetaData(schema=schema)
@@ -294,7 +298,9 @@ def import_parquet(
 
     table = get_table(engine, table_name, schema=settings.postgres_schema)
     tracking_table = get_table(
-        engine, "parquet_import_tracking", schema=settings.postgres_schema
+        engine,
+        settings.postgres_schema,
+        "parquet_import_tracking",
     )
 
     is_empty = local_filename.endswith(".empty")

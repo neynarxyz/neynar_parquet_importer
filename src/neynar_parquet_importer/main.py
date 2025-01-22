@@ -89,7 +89,11 @@ def sync_parquet_to_db(
     """
     try:
         last_import_filename = None
-        parquet_import_tracking = get_table(db_engine, "parquet_import_tracking")
+        parquet_import_tracking = get_table(
+            db_engine,
+            settings.postgres_schema,
+            "parquet_import_tracking",
+        )
         s3_client = get_s3_client(settings)
 
         incremental_filename = check_for_existing_incremental_import(
