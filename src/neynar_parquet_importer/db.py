@@ -296,7 +296,11 @@ def import_parquet(
         f"parquet_table:{schema_name}.{table_name}",
     ]
 
-    table = get_table(engine, table_name, schema=settings.postgres_schema)
+    table = get_table(
+        engine,
+        settings.postgres_schema,
+        table_name,
+    )
     tracking_table = get_table(
         engine,
         settings.postgres_schema,
