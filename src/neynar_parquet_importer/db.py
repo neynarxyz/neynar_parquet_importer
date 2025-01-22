@@ -118,13 +118,15 @@ def init_db(uri, parquet_tables, settings: Settings):
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         # set the schema if we have one configured. otherwise everything goes into "public"
         if settings.postgres_schema and settings.postgres_schema != "public":
-            # TODO: make this optional
-            create_query = text(
-                f"CREATE SCHEMA IF NOT EXISTS {settings.postgres_schema};"
-            )
-            conn.execute(create_query)
+            # # TODO: make this optional
+            # LOGGER.debug("create schema if not exists", extra={"schema": settings.postgres_schema})
+            # create_query = text(
+            #     f"CREATE SCHEMA IF NOT EXISTS {settings.postgres_schema};"
+            # )
+            # conn.execute(create_query)
 
             # # TODO: make this optional
+            # LOGGER.debug("alter", extra={"user": "your-user", "schema": settings.postgres_schema})
             # alter_query = text(
             #     f"ALTER USER your-user set SEARCH_PATH = '{settings.postgres_schema}';"
             # )
