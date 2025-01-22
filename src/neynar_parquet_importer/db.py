@@ -149,7 +149,9 @@ def init_db(uri, parquet_tables, settings: Settings):
 def check_for_existing_incremental_import(engine, settings: Settings, table_name):
     """Returns the filename for the newest incremental. This may only be partially imported."""
 
-    parquet_import_tracking = get_table(engine, "parquet_import_tracking")
+    parquet_import_tracking = get_table(
+        engine, "parquet_import_tracking", schema=settings.postgres_schema
+    )
 
     # TODO: make this much smarter. it needs to find the last one that was fully imported. there might be holes if we run things in parallel!
     stmt = (
@@ -189,7 +191,9 @@ def check_for_existing_incremental_import(engine, settings: Settings, table_name
 def check_for_existing_full_import(engine, settings: Settings, table_name):
     """Returns the filename of the newest full import (there should really only be one). This may only be partially imported."""
 
-    parquet_import_tracking = get_table(engine, "parquet_import_tracking")
+    parquet_import_tracking = get_table(
+        engine, "parquet_import_tracking", schema=settings.postgres_schema
+    )
 
     stmt = (
         select(
@@ -251,8 +255,10 @@ def thread_local_lru_cache(maxsize=None):
 # TODO: i think this is blocking the GIL
 # TODO: we should have one metadata with all the tables in it and fetch from there
 @thread_local_lru_cache(maxsize=None)
-def get_table(engine, table_name):
-    metadata = MetaData()
+def get_table(engine, table_name, schema=None):
+    LOGGER.debug("get_table", extra={"table_name": table_name, "schema": schema})
+
+    metadata = MetaData(schema=schema)
     return Table(table_name, metadata, autoload_with=engine)
 
 
@@ -286,8 +292,10 @@ def import_parquet(
         f"parquet_table:{schema_name}.{table_name}",
     ]
 
-    table = get_table(engine, table_name)
-    tracking_table = get_table(engine, "parquet_import_tracking")
+    table = get_table(engine, table_name, schema=settings.postgres_schema)
+    tracking_table = get_table(
+        engine, "parquet_import_tracking", schema=settings.postgres_schema
+    )
 
     is_empty = local_filename.endswith(".empty")
 
