@@ -75,7 +75,9 @@ def download_latest_full(s3_client, settings: Settings, table_name, progress_cal
     # TODO: split this here into a "find_latest_full" function and a "download_full" function
     progress_callback.more_steps(latest_size_bytes)
 
-    LOGGER.info("Downloading the latest full backup to %s...", local_file_path)
+    LOGGER.info(
+        "Downloading the latest full backup", extra={"full_path": local_file_path}
+    )
     # TODO: download to a temporary directory so that we can resume if it partially exists
     s3_client.download_file(
         settings.parquet_s3_bucket,

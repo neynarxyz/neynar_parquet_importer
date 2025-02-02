@@ -174,6 +174,14 @@ def check_for_existing_incremental_import(engine, settings: Settings, table_name
         result = conn.execute(stmt).fetchone()
 
     if result is None:
+        LOGGER.info(
+            "no incremental files found",
+            extra={
+                "table_name": table_name,
+                "file_version": settings.npe_version,
+                "file_duration_s": settings.incremental_duration,
+            },
+        )
         return None
 
     latest_filename = result[0]

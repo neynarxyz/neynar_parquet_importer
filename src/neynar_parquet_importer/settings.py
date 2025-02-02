@@ -41,6 +41,9 @@ class Settings(BaseSettings):
         if not self.postgres_schema:
             self.postgres_schema = "public"
 
+        if not self.npe_version:
+            self.npe_version = "v2"
+
         if not self.incremental_duration:
             if self.npe_version == "v2":
                 self.incremental_duration = 300
