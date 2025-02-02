@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     target_name: str = "unknown"
 
     def initialize(self):
+        if not self.postgres_schema:
+            self.postgres_schema = "public"
+
         # TODO: i don't love this, but somewhere in the code is turning naive datetimes into the local timezone instead of UTC
         os.environ["TZ"] = "UTC"
         time.tzset()
