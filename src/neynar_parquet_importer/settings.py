@@ -41,6 +41,14 @@ class Settings(BaseSettings):
         if not self.postgres_schema:
             self.postgres_schema = "public"
 
+        if not self.incremental_duration:
+            if self.npe_version == "v2":
+                self.incremental_duration = 300
+            elif self.npe_version == "v3":
+                self.incremental_duration = 1
+            else:
+                raise ValueError("no incremental duration set!")
+
         # TODO: i don't love this, but somewhere in the code is turning naive datetimes into the local timezone instead of UTC
         os.environ["TZ"] = "UTC"
         time.tzset()

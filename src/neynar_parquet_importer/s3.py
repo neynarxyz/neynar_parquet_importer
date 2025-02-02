@@ -2,7 +2,6 @@ from functools import lru_cache
 import os
 import re
 import boto3
-import botocore.exceptions
 from botocore.config import Config
 
 from neynar_parquet_importer.progress import ProgressCallback

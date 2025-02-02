@@ -102,7 +102,10 @@ def sync_parquet_to_db(
         if incremental_filename:
             # if we have imported an incremental, then we should start there instead of at the full
             # TODO: if this is very old, we might want to start with a full instead
-            LOGGER.debug("Found existing incremental import %s", incremental_filename)
+            LOGGER.info(
+                "Resuming incremental import",
+                extra={"filename": incremental_filename},
+            )
 
             if not os.path.exists(incremental_filename):
                 last_start_timestamp = parse_parquet_filename(incremental_filename)[
@@ -144,6 +147,11 @@ def sync_parquet_to_db(
                 # if no full export, download the latest one
                 full_filename = download_latest_full(
                     s3_client, settings, table_name, progress_callbacks["full_bytes"]
+                )
+            else:
+                LOGGER.info(
+                    "Resuming full import",
+                    extra={"filename": full_filename},
                 )
 
             import_parquet(
