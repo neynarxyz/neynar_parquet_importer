@@ -19,6 +19,6 @@ services:
       - .env
     # restart: unless-stopped
     volumes:
-      - ./data/parquet:/usr/src/app/data/parquet
+      - ./data/parquet:/app/data/parquet
       # # sharing `.aws` is only required if you have your AWS credentials on the host machine instead of in `.env`
       - $HOME/.aws:/root/.aws
