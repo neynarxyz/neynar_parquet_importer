@@ -17,7 +17,9 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM information_schema.columns
-        WHERE table_name = 'parquet_import_tracking' AND column_name = 'completed'
+        WHERE table_name = 'parquet_import_tracking'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+        AND column_name = 'completed'
     ) THEN
         ALTER TABLE parquet_import_tracking
         ADD COLUMN completed BOOLEAN DEFAULT TRUE;

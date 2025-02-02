@@ -15,7 +15,9 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM information_schema.columns
-        WHERE table_name = 'follows' AND column_name = 'display_timestamp'
+        WHERE table_name = 'follows'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+        AND column_name = 'display_timestamp'
     ) THEN
         ALTER TABLE follows
         ADD COLUMN display_timestamp TIMESTAMP;

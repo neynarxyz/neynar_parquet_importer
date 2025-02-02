@@ -1,6 +1,11 @@
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.views WHERE table_name = 'profiles_with_verifications') THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.views
+        WHERE table_name = 'profiles_with_verifications'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+    ) THEN
         CREATE VIEW ${POSTGRES_SCHEMA}.profiles_with_verifications AS
         SELECT 
             p.id AS profile_id,
