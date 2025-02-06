@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS public.blocks
+CREATE TABLE IF NOT EXISTS blocks
 (
     id bigint NOT NULL PRIMARY KEY,
     created_at timestamp without time zone NOT NULL,
