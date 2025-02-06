@@ -61,6 +61,7 @@ ALL_TABLES = {
         "signers",
         "storage",
         "user_data",
+        "user_labels",
         # "verifications",  # NOTE: please use the nindexer verifications table instead
         "warpcast_power_users",
     ],
