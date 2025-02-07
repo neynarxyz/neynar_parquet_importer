@@ -41,6 +41,7 @@ dependencies = [
     "typing-extensions==4.12.2",
     "urllib3==2.2.2",
     "wcwidth==0.2.13",
+    "psycopg2==2.9.10"
 ]
 
 [build-system]
