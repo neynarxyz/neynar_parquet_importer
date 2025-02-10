@@ -1,1 +1,1 @@
-CREATE INDEX CONCURRENTLY IF NOT EXISTS follows_fid ON follows (fid);
+CREATE INDEX IF NOT EXISTS follows_fid ON follows (fid);

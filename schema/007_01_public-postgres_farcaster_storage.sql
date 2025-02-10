@@ -1,1 +1,1 @@
-CREATE INDEX CONCURRENTLY IF NOT EXISTS storage_fid ON storage (fid);
+CREATE INDEX IF NOT EXISTS storage_fid ON storage (fid);
