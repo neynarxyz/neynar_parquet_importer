@@ -2,7 +2,6 @@ import atexit
 from concurrent.futures import CancelledError
 import logging
 from datadog import statsd
-from functools import lru_cache
 import glob
 import json
 from os import path
@@ -146,14 +145,13 @@ def init_db(uri, parquet_tables, settings: Settings):
     return engine
 
 
-def check_for_existing_incremental_import(engine, settings: Settings, table_name):
+def check_for_existing_incremental_import(
+    engine,
+    parquet_import_tracking: Table,
+    settings: Settings,
+    table: Table,
+):
     """Returns the filename for the newest incremental. This may only be partially imported."""
-
-    parquet_import_tracking = get_table(
-        engine,
-        settings.postgres_schema,
-        "parquet_import_tracking",
-    )
 
     # TODO: make this much smarter. it needs to find the last one that was fully imported. there might be holes if we run things in parallel!
     stmt = (
@@ -161,7 +159,7 @@ def check_for_existing_incremental_import(engine, settings: Settings, table_name
             parquet_import_tracking.c.file_name,
         )
         .where(parquet_import_tracking.c.file_type == "incremental")
-        .where(parquet_import_tracking.c.table_name == table_name)
+        .where(parquet_import_tracking.c.table_name == table.name)
         .where(parquet_import_tracking.c.file_version == settings.npe_version)
         .where(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
@@ -177,7 +175,7 @@ def check_for_existing_incremental_import(engine, settings: Settings, table_name
         LOGGER.info(
             "no incremental files found",
             extra={
-                "table_name": table_name,
+                "table": table.name,
                 "file_version": settings.npe_version,
                 "file_duration_s": settings.incremental_duration,
             },
@@ -198,21 +196,17 @@ def check_for_existing_incremental_import(engine, settings: Settings, table_name
     return latest_filename
 
 
-def check_for_existing_full_import(engine, settings: Settings, table_name):
+def check_for_existing_full_import(
+    engine, parquet_import_tracking: Table, settings: Settings, table: Table
+):
     """Returns the filename of the newest full import (there should really only be one). This may only be partially imported."""
-
-    parquet_import_tracking = get_table(
-        engine,
-        settings.postgres_schema,
-        "parquet_import_tracking",
-    )
 
     stmt = (
         select(
             parquet_import_tracking.c.file_name,
         )
         .where(parquet_import_tracking.c.file_type == "full")
-        .where(parquet_import_tracking.c.table_name == table_name)
+        .where(parquet_import_tracking.c.table_name == table.name)
         .where(parquet_import_tracking.c.file_version == settings.npe_version)
         .where(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
@@ -248,14 +242,35 @@ def clean_parquet_data(col_name, value):
     return value
 
 
-# TODO: i think this is blocking the GIL
-# TODO: we should have one metadata with all the tables in it and fetch from there
-@lru_cache(maxsize=None)
-def get_table(engine, schema, table_name):
-    LOGGER.debug("get_table", extra={"table_name": table_name, "schema": schema})
+def get_tables(
+    db_schema,
+    engine,
+    included_tables,
+):
+    """
+    Fetches the tables and views using SQLAlchemy.
 
-    metadata = MetaData(schema=schema)
-    return Table(table_name, metadata, autoload_with=engine)
+    :param engine: SQLAlchemy engine connected to the database.
+    :return: List of Table objects.
+    """
+
+    if db_schema == "public" or not db_schema:
+        # i don't love this, but it keeps the table names consistent with the old code
+        db_schema = None
+
+    meta = MetaData(schema=db_schema)
+    meta.reflect(bind=engine, views=False)
+
+    if included_tables:
+        filtered_table_names = included_tables + ["parquet_import_tracking"]
+
+        filtered_tables = [
+            table for table in meta.sorted_tables if table.name in filtered_table_names
+        ]
+    else:
+        filtered_tables = meta.sorted_tables
+
+    return {table.name: table for table in filtered_tables}
 
 
 def raise_any_exceptions(fs):
@@ -271,33 +286,23 @@ def raise_any_exceptions(fs):
 
 def import_parquet(
     engine,
-    table_name,
+    table: Table,
     local_filename,
     file_type,
     progress_callback,
     empty_callback,
+    parquet_import_tracking: Table,
     row_group_executor,
     settings: Settings,
 ):
     parsed_filename = parse_parquet_filename(local_filename)
 
-    assert table_name == parsed_filename["table_name"]
+    assert table.name == parsed_filename["table_name"]
     schema_name = parsed_filename["schema_name"]
 
     dd_tags = [
-        f"parquet_table:{schema_name}.{table_name}",
+        f"parquet_table:{schema_name}.{table.name}",
     ]
-
-    table = get_table(
-        engine,
-        settings.postgres_schema,
-        table_name,
-    )
-    tracking_table = get_table(
-        engine,
-        settings.postgres_schema,
-        "parquet_import_tracking",
-    )
 
     is_empty = local_filename.endswith(".empty")
 
@@ -316,8 +321,8 @@ def import_parquet(
     last_row_group_imported = None
 
     # Prepare the insert statement
-    stmt = pg_insert(tracking_table).values(
-        table_name=table_name,
+    stmt = pg_insert(parquet_import_tracking).values(
+        table_name=table.name,
         file_name=local_filename,
         file_type=file_type,
         file_version=settings.npe_version,
@@ -331,9 +336,11 @@ def import_parquet(
         index_elements=["file_name"],  # Use the unique constraint columns
         set_={
             # No actual data changes; this is a no-op update
-            "last_row_group_imported": tracking_table.c.last_row_group_imported,
+            "last_row_group_imported": parquet_import_tracking.c.last_row_group_imported,
         },
-    ).returning(tracking_table.c.id, tracking_table.c.last_row_group_imported)
+    ).returning(
+        parquet_import_tracking.c.id, parquet_import_tracking.c.last_row_group_imported
+    )
 
     row = fetchone_with_retry(engine, upsert_stmt)
 
@@ -416,8 +423,8 @@ def import_parquet(
     # update our database entry's last_row_group_imported
     # read them in order rather than with as_completed
     # TODO: have all the tables do this in another thread?
-    update_tracking_stmt = tracking_table.update().where(
-        tracking_table.c.id == tracking_id
+    update_tracking_stmt = parquet_import_tracking.update().where(
+        parquet_import_tracking.c.id == tracking_id
     )
     i = file_age_s = row_age_s = None
     while fs:
@@ -462,7 +469,7 @@ def import_parquet(
                 "Completed upsert #%s/%s for %s",
                 f"{i+1:_}",
                 f"{num_row_groups:_}",
-                table_name,
+                table.name,
                 extra={
                     "file_age_s": file_age_s,
                     "row_age_s": row_age_s,
@@ -486,7 +493,7 @@ def import_parquet(
             extra={
                 "file_age_s": file_age_s,
                 "row_age_s": row_age_s,
-                "table_name": table_name,
+                "table": table.name,
                 "file_name": local_filename,
                 "num_row_groups": num_row_groups,
                 "num_rows": parquet_file.metadata.num_rows,
@@ -499,7 +506,7 @@ def import_parquet(
             extra={
                 "file_age_s": file_age_s,
                 "row_age_s": row_age_s,
-                "table_name": table_name,
+                "table": table.name,
                 "file_name": local_filename,
                 "i": i,
                 "num_row_groups": num_row_groups,

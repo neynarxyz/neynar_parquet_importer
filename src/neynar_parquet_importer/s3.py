@@ -3,6 +3,7 @@ import os
 import re
 import boto3
 from botocore.config import Config
+from sqlalchemy import Table
 
 from neynar_parquet_importer.progress import ProgressCallback
 
@@ -25,10 +26,15 @@ def parse_parquet_filename(filename):
         raise ValueError("Parquet filename does not match expected format.", filename)
 
 
-def download_latest_full(s3_client, settings: Settings, table_name, progress_callback):
+def download_latest_full(
+    s3_client,
+    settings: Settings,
+    table: Table,
+    progress_callback,
+):
     s3_prefix = settings.parquet_s3_prefix() + "full/"
 
-    full_export_prefix = s3_prefix + f"{settings.parquet_s3_schema}-{table_name}-0-"
+    full_export_prefix = s3_prefix + f"{settings.parquet_s3_schema}-{table.name}-0-"
 
     paginator = s3_client.get_paginator("list_objects_v2")
     operation_parameters = {
@@ -92,7 +98,7 @@ def download_latest_full(s3_client, settings: Settings, table_name, progress_cal
 def download_incremental(
     s3_client,
     settings: Settings,
-    tablename,
+    table: Table,
     start_timestamp,
     bytes_downloaded_progress: ProgressCallback,
     empty_steps_progress: ProgressCallback,
@@ -101,7 +107,7 @@ def download_incremental(
     end_timestamp = start_timestamp + settings.incremental_duration
 
     incremental_name = (
-        f"{settings.parquet_s3_schema}-{tablename}-{start_timestamp}-{end_timestamp}"
+        f"{settings.parquet_s3_schema}-{table.name}-{start_timestamp}-{end_timestamp}"
     )
 
     prefix_name = f"{incremental_name}."

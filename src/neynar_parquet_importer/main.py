@@ -25,7 +25,7 @@ from .db import (
     check_for_existing_full_import,
     check_for_existing_incremental_import,
     execute_with_retry,
-    get_table,
+    get_tables,
     import_parquet,
     init_db,
     raise_any_exceptions,
@@ -90,7 +90,8 @@ def sync_parquet_to_db(
     db_engine,
     file_executor,
     row_group_executor,
-    table_name,
+    table,
+    parquet_import_tracking,
     progress_callbacks,
     settings: Settings,
 ):
@@ -100,15 +101,14 @@ def sync_parquet_to_db(
     """
     try:
         last_import_filename = None
-        parquet_import_tracking = get_table(
-            db_engine,
-            settings.postgres_schema,
-            "parquet_import_tracking",
-        )
+
         s3_client = get_s3_client(settings)
 
         incremental_filename = check_for_existing_incremental_import(
-            db_engine, settings, table_name
+            db_engine,
+            parquet_import_tracking,
+            settings,
+            table,
         )
         if incremental_filename:
             # if we have imported an incremental, then we should start there instead of at the full
@@ -120,7 +120,7 @@ def sync_parquet_to_db(
                 incremental_filename = download_incremental(
                     s3_client,
                     settings,
-                    table_name,
+                    table,
                     last_start_timestamp,
                     progress_callbacks["incremental_bytes"],
                     progress_callbacks["empty_steps"],
@@ -129,11 +129,12 @@ def sync_parquet_to_db(
             if incremental_filename:
                 import_parquet(
                     db_engine,
-                    table_name,
+                    table,
                     incremental_filename,
                     "incremental",
                     progress_callbacks["incremental_steps"],
                     progress_callbacks["empty_steps"],
+                    parquet_import_tracking,
                     row_group_executor,
                     settings,
                 )
@@ -143,7 +144,10 @@ def sync_parquet_to_db(
         if last_import_filename is None:
             # no incrementals yet (or a very old one), start with the newest full file
             full_filename = check_for_existing_full_import(
-                db_engine, settings, table_name
+                db_engine,
+                parquet_import_tracking,
+                settings,
+                table,
             )
 
             # TODO: spawn this so we can check for incrementals while this is downloading
@@ -151,16 +155,20 @@ def sync_parquet_to_db(
             if full_filename is None or not os.path.exists(full_filename):
                 # if no full export, download the latest one
                 full_filename = download_latest_full(
-                    s3_client, settings, table_name, progress_callbacks["full_bytes"]
+                    s3_client,
+                    settings,
+                    table,
+                    progress_callbacks["full_bytes"],
                 )
 
             import_parquet(
                 db_engine,
-                table_name,
+                table,
                 full_filename,
                 "full",
                 progress_callbacks["full_steps"],
                 progress_callbacks["empty_steps"],
+                parquet_import_tracking,
                 row_group_executor,
                 settings,
             )
@@ -221,7 +229,7 @@ def sync_parquet_to_db(
                 if SHUTDOWN_EVENT.wait(sleep_amount):
                     LOGGER.debug(
                         "shutting down sync_parquet_to_db",
-                        extra={"table": table_name},
+                        extra={"table": table.name},
                     )
                     return
 
@@ -232,10 +240,11 @@ def sync_parquet_to_db(
                 download_and_import_incremental_parquet,
                 db_engine,
                 s3_client,
-                table_name,
+                table,
                 max_wait_duration,
                 next_start_timestamp,
                 progress_callbacks,
+                parquet_import_tracking,
                 row_group_executor,
                 settings,
             )
@@ -247,13 +256,13 @@ def sync_parquet_to_db(
         if e.args == ("cannot schedule new futures after shutdown",):
             LOGGER.debug(
                 "Executor is shutting down during sync_parquet_to_db",
-                extra={"table": table_name},
+                extra={"table": table.name},
             )
             return
 
         LOGGER.exception(
             "exception inside sync_parquet_to_db",
-            extra={"table": table_name},
+            extra={"table": table.name},
         )
         SHUTDOWN_EVENT.set()
         raise
@@ -281,10 +290,11 @@ def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
 def download_and_import_incremental_parquet(
     db_engine,
     s3_client,
-    table_name,
+    table: Table,
     max_wait_duration,
     next_start_timestamp,
     progress_callbacks,
+    parquet_import_tracking,
     row_group_executor,
     settings: Settings,
 ):
@@ -302,7 +312,7 @@ def download_and_import_incremental_parquet(
             if now > max_wait:
                 extra = {
                     "max_wait_duration": max_wait_duration,
-                    "table_name": table_name,
+                    "table": table.name,
                     "next_start_timestamp": next_start_timestamp,
                     "now": now,
                 }
@@ -321,7 +331,7 @@ def download_and_import_incremental_parquet(
             incremental_filename = download_incremental(
                 s3_client,
                 settings,
-                table_name,
+                table,
                 next_start_timestamp,
                 progress_callbacks["incremental_bytes"],
                 progress_callbacks["empty_steps"],
@@ -332,7 +342,7 @@ def download_and_import_incremental_parquet(
                 sleep_amount = min(30, settings.incremental_duration / 2.0)
 
                 extra = {
-                    "table_name": table_name,
+                    "table": table.name,
                     "sleep_amount": sleep_amount,
                     "start_timestamp": next_start_timestamp,
                 }
@@ -351,11 +361,12 @@ def download_and_import_incremental_parquet(
 
         import_parquet(
             db_engine,
-            table_name,
+            table,
             incremental_filename,
             "incremental",
             progress_callbacks["incremental_steps"],
             progress_callbacks["empty_steps"],
+            parquet_import_tracking,
             row_group_executor,
             settings,
         )
@@ -408,15 +419,17 @@ def main(settings: Settings):
         db_engine = table_executor = file_executor = row_group_executors = None
         try:
             if settings.tables:
-                tables = settings.tables.split(",")
+                table_names = settings.tables.split(",")
             else:
-                tables = ALL_TABLES[
+                table_names = ALL_TABLES[
                     (settings.parquet_s3_database, settings.parquet_s3_schema)
                 ]
 
-            LOGGER.info("Tables: %s", ",".join(tables))
+            LOGGER.info("Tables: %s", ",".join(table_names))
 
-            db_engine = init_db(str(settings.postgres_dsn), tables, settings)
+            db_engine = init_db(str(settings.postgres_dsn), table_names, settings)
+
+            tables = get_tables(settings.postgres_schema, db_engine, table_names)
 
             # TODO: test the s3 client here?
 
@@ -488,7 +501,7 @@ def main(settings: Settings):
             # TODO: think more about what size the queues should be. we don't want to overload postgres or s3
             table_executor = stack.enter_context(
                 ThreadPoolExecutor(
-                    max_workers=len(tables),
+                    max_workers=len(table_names),
                     thread_name_prefix="Table",
                 )
             )
@@ -499,7 +512,7 @@ def main(settings: Settings):
                         thread_name_prefix=f"{table_name}File",
                     )
                 )
-                for table_name in tables
+                for table_name in table_names
             }
             row_group_executors = {
                 table_name: stack.enter_context(
@@ -508,7 +521,7 @@ def main(settings: Settings):
                         thread_name_prefix=f"{table_name}Rows",
                     )
                 )
-                for table_name in tables
+                for table_name in table_names
             }
 
             pool_size_needed = settings.row_workers * len(
@@ -542,11 +555,12 @@ def main(settings: Settings):
                     db_engine,
                     file_executors[table_name],
                     row_group_executors[table_name],
-                    table_name,
+                    tables[table_name],
+                    tables["parquet_import_tracking"],
                     progress_callbacks,
                     settings,
                 ): table_name
-                for table_name in tables
+                for table_name in table_names
             }
 
             # TODO: start a thread for making sure imports are happening. if no imports for 10x the duration, force shutdown
