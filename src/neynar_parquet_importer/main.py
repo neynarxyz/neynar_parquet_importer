@@ -219,7 +219,10 @@ def sync_parquet_to_db(
                 # )
 
                 if SHUTDOWN_EVENT.wait(sleep_amount):
-                    LOGGER.debug("shutting down sync_parquet_to_db for %s", table_name)
+                    LOGGER.debug(
+                        "shutting down sync_parquet_to_db",
+                        extra={"table": table_name},
+                    )
                     return
 
             # TODO: spawn a task on file_executor here
@@ -242,10 +245,16 @@ def sync_parquet_to_db(
             next_end_timestamp += settings.incremental_duration
     except Exception as e:
         if e.args == ("cannot schedule new futures after shutdown",):
-            LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
+            LOGGER.debug(
+                "Executor is shutting down during sync_parquet_to_db",
+                extra={"table": table_name},
+            )
             return
 
-        LOGGER.exception("exception inside sync_parquet_to_db")
+        LOGGER.exception(
+            "exception inside sync_parquet_to_db",
+            extra={"table": table_name},
+        )
         SHUTDOWN_EVENT.set()
         raise
     finally:
@@ -504,17 +513,26 @@ def main(settings: Settings):
                 for table_name in tables
             }
 
-            pool_size_needed = row_workers * len(row_group_executors)
+            pool_size_needed = row_workers * len(
+                row_group_executors
+            ) + file_workers * len(file_executors)
 
             LOGGER.info(
                 "workers",
                 extra={
                     "row": row_workers,
                     "file": file_workers,
-                    "db_available": settings.postgres_pool_size,
-                    "db_needed": pool_size_needed,
                 },
             )
+
+            if pool_size_needed > settings.postgres_pool_size:
+                LOGGER.error(
+                    "postgres_pool_size is too small! high paralellism may crash the app!",
+                    extra={
+                        "db_available": settings.postgres_pool_size,
+                        "db_needed": pool_size_needed,
+                    },
+                )
 
             futures = {
                 table_executor.submit(
