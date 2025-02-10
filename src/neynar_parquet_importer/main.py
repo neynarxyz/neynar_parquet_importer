@@ -529,6 +529,8 @@ def main(settings: Settings):
                 LOGGER.info(
                     "workers",
                     extra={
+                        "db_available": settings.postgres_pool_size,
+                        "db_needed": pool_size_needed,
                         "row": settings.row_workers,
                         "file": settings.file_workers,
                     },
