@@ -70,6 +70,7 @@ def init_db(uri, parquet_tables, settings: Settings):
             pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
         )
 
+    # TODO: this is not be forceful enough. we want to hard kill all the connections at exit
     atexit.register(engine.dispose)
 
     LOGGER.info("migrating...")

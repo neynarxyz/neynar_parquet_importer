@@ -504,7 +504,17 @@ def main(settings: Settings):
                 for table_name in tables
             }
 
-            LOGGER.info("workers", extra={"row": row_workers, "file": file_workers})
+            pool_size_needed = row_workers * len(row_group_executors)
+
+            LOGGER.info(
+                "workers",
+                extra={
+                    "row": row_workers,
+                    "file": file_workers,
+                    "db_available": settings.postgres_pool_size,
+                    "db_needed": pool_size_needed,
+                },
+            )
 
             futures = {
                 table_executor.submit(
