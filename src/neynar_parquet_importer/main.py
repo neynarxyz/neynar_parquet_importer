@@ -56,7 +56,7 @@ ALL_TABLES = {
         "fnames",
         # "links",  # NOTE: please use the nindexer follows table instead
         "power_users",
-        # "profile_with_addresses",  # TODO: `profile_with_addresses` is a view and needs some special handling for duplicate ids
+        # "profile_with_addresses",  # NOTE: please use the nindexer profiles_with_verifications VIEW instead
         "reactions",  # NOTE: `reactions` is VERY large with LOTS of writes!
         "signers",
         "storage",
@@ -72,6 +72,16 @@ ALL_TABLES = {
         "neynar_user_scores",
         "profiles",
         "verifications",
+    ],
+}
+
+ALL_VIEWS = {
+    # for these, set `npe_version=v2` `parquet_s3_schema=farcaster` `incremental_duration=300`
+    ("public-postgres", "farcaster"): [],
+    # for these, set `npe_version=v3` `parquet_s3_schema=nindexer` `incremental_duration=1`
+    ("public-postgres", "nindexer"): [
+        # this view require nindexer's "profiles" and "verifications" tables
+        "profiles_with_verifications",
     ],
 }
 
