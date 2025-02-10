@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     datadog_enabled: bool = True
     exit_after_max_wait: bool = False  # TODO: improve this more
+    file_workers: int = 4
     incremental_duration: int = Field(300, alias="npe_duration")
     interactive_debug: bool = False
     local_input_dir: Path = Path("./data/parquet")
@@ -34,6 +35,7 @@ class Settings(BaseSettings):
     postgres_poolclass: str = "QueuePool"
     postgres_pool_size: int = 50
     postgres_schema: str = "public"
+    row_workers: int = 4
     s3_pool_size: int = 100
     target_name: str = "unknown"
 

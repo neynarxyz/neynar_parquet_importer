@@ -492,38 +492,28 @@ def main(settings: Settings):
                     thread_name_prefix="Table",
                 )
             )
-            file_workers = max(2, (settings.s3_pool_size) // (len(tables) + 1))
             file_executors = {
                 table_name: stack.enter_context(
                     ThreadPoolExecutor(
-                        max_workers=file_workers,
+                        max_workers=settings.file_workers,
                         thread_name_prefix=f"{table_name}File",
                     )
                 )
                 for table_name in tables
             }
-            row_workers = max(2, (settings.postgres_pool_size) // (len(tables) + 1))
             row_group_executors = {
                 table_name: stack.enter_context(
                     ThreadPoolExecutor(
-                        max_workers=row_workers,
+                        max_workers=settings.row_workers,
                         thread_name_prefix=f"{table_name}Rows",
                     )
                 )
                 for table_name in tables
             }
 
-            pool_size_needed = row_workers * len(
+            pool_size_needed = settings.row_workers * len(
                 row_group_executors
-            ) + file_workers * len(file_executors)
-
-            LOGGER.info(
-                "workers",
-                extra={
-                    "row": row_workers,
-                    "file": file_workers,
-                },
-            )
+            ) + settings.file_workers * len(file_executors)
 
             if pool_size_needed > settings.postgres_pool_size:
                 LOGGER.error(
@@ -531,6 +521,16 @@ def main(settings: Settings):
                     extra={
                         "db_available": settings.postgres_pool_size,
                         "db_needed": pool_size_needed,
+                        "row": settings.row_workers,
+                        "file": settings.file_workers,
+                    },
+                )
+            else:
+                LOGGER.info(
+                    "workers",
+                    extra={
+                        "row": settings.row_workers,
+                        "file": settings.file_workers,
                     },
                 )
 
