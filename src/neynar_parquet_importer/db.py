@@ -114,6 +114,8 @@ def init_db(uri, parquet_tables, settings: Settings):
     if not migrations:
         raise RuntimeError("No migrations found")
 
+    LOGGER.info("Connecting to the database for migrations")
+
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         # set the schema if we have one configured. otherwise everything goes into "public"
         if settings.postgres_schema and settings.postgres_schema != "public":
