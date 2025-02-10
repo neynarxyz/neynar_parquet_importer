@@ -1,9 +1,8 @@
 import atexit
 from concurrent.futures import CancelledError
 import logging
-import threading
 from datadog import statsd
-from functools import lru_cache, wraps
+from functools import lru_cache
 import glob
 import json
 from os import path
@@ -44,7 +43,7 @@ def init_db(uri, parquet_tables, settings: Settings):
         engine = create_engine(
             uri,
             connect_args={
-                "connect_timeout": 10,
+                "connect_timeout": 30,
                 # # TODO: this works on some servers, but others don't have permissions
                 # "options": f"-c statement_timeout={statement_timeout}",
             },
@@ -57,14 +56,14 @@ def init_db(uri, parquet_tables, settings: Settings):
             # TODO: make this a setting
             echo=False,
             connect_args={
-                "connect_timeout": 10,
+                "connect_timeout": 30,
                 # # TODO: this works on some servers, but others don't have permissions
                 # "options": f"-c statement_timeout={statement_timeout}",
             },
             poolclass=QueuePool,
             max_overflow=settings.postgres_max_overflow,
             pool_size=settings.postgres_pool_size,
-            pool_timeout=30,
+            pool_timeout=60,
             pool_pre_ping=False,  # this slows things down too much
             pool_reset_on_return=True,
             pool_recycle=800,  # TODO: benchmark this. i see too many errors about connections being closed by the server
@@ -249,25 +248,9 @@ def clean_parquet_data(col_name, value):
     return value
 
 
-def thread_local_lru_cache(maxsize=None):
-    thread_local_data = threading.local()
-
-    def decorator(func):
-        @wraps(func)
-        def wrapped(*args, **kwargs):
-            # Create a thread-local cache if it doesn't exist
-            if not hasattr(thread_local_data, "cache"):
-                thread_local_data.cache = lru_cache(maxsize)(func)
-            return thread_local_data.cache(*args, **kwargs)
-
-        return wrapped
-
-    return decorator
-
-
 # TODO: i think this is blocking the GIL
 # TODO: we should have one metadata with all the tables in it and fetch from there
-@thread_local_lru_cache(maxsize=None)
+@lru_cache(maxsize=None)
 def get_table(engine, schema, table_name):
     LOGGER.debug("get_table", extra={"table_name": table_name, "schema": schema})
 
