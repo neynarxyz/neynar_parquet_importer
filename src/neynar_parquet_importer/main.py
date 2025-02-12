@@ -67,9 +67,9 @@ ALL_TABLES = {
     ],
     # for these, set `npe_version=v3` `parquet_s3_schema=nindexer` `incremental_duration=1`
     ("public-postgres", "nindexer"): [
-        "follow_counts",
+        # "follow_counts",  # NOTE: this table costs extra. Talk to us if you need it
         "follows",
-        "neynar_user_scores",
+        # "neynar_user_scores",  # NOTE: this table costs extra. Talk to us if you need it
         "profiles",
         "verifications",
     ],
