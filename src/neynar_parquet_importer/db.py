@@ -137,8 +137,11 @@ def init_db(uri, parquet_tables, settings: Settings):
             schema_query = text(f"SET search_path TO {settings.postgres_schema};")
             conn.execute(schema_query)
 
-        for migration in migrations:
-            LOGGER.debug("applying", extra={"migration": str(migration)})
+        for i, migration in enumerate(migrations):
+            LOGGER.info("applying migration", extra={"i": i})
+            LOGGER.debug(
+                "applying migration", extra={"i": i, "migration": str(migration)}
+            )
             conn.execute(migration)
 
     LOGGER.info("migrations complete.")
