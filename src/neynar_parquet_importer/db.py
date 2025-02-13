@@ -170,8 +170,7 @@ def check_for_existing_incremental_import(
         .limit(1)
     )
 
-    with engine.connect() as conn:
-        result = conn.execute(stmt).fetchone()
+    result = fetchone_with_retry(engine, stmt)
 
     if result is None:
         LOGGER.info(
@@ -217,8 +216,7 @@ def check_for_existing_full_import(
         .limit(1)
     )
 
-    with engine.connect() as conn:
-        result = conn.execute(stmt).fetchone()
+    result = fetchone_with_retry(engine, stmt)
 
     if result is None:
         return None
