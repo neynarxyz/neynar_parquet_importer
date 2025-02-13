@@ -1,3 +1,26 @@
+-- TODO: if the OLD channel_members table exists (check for "id" being a SERIAL), then DROP it!
+-- TODO: then, we need to send channel_members from s3 into google public postgres
+
+DO $$
+BEGIN
+    -- Check if replicator_v1's old seq exists
+    IF EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE c.relkind = 'S'
+        AND n.nspname = '${POSTGRES_SCHEMA}'
+        AND c.relname = 'channel_members_id_seq'
+
+    ) THEN
+        -- Drop the whole table
+        DROP TABLE ${POSTGRES_SCHEMA}.channel_members;
+        -- Drop the sequence
+        DROP SEQUENCE ${POSTGRES_SCHEMA}.channel_members_id_seq;
+    END IF;
+END $$;
+
+
 CREATE TABLE IF NOT EXISTS channel_members
 (
     id bigint PRIMARY KEY,
