@@ -14,8 +14,7 @@ from tenacity import (
     after_log,
     retry,
     stop_after_attempt,
-    stop_after_delay,
-    wait_random,
+    wait_random_exponential,
 )
 
 from .logger import LOGGER
@@ -522,8 +521,8 @@ def sleep_or_raise_shutdown(t):
 
 
 @retry(
-    stop=stop_after_delay(30) | stop_after_attempt(30),
-    wait=wait_random(0.2, 1.0),
+    stop=stop_after_attempt(10),
+    wait=wait_random_exponential(multiplier=1, min=1, max=10),
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
@@ -536,8 +535,8 @@ def execute_with_retry(engine, stmt):
 
 
 @retry(
-    stop=stop_after_delay(30) | stop_after_attempt(30),
-    wait=wait_random(0.2, 2.0),
+    stop=stop_after_attempt(10),
+    wait=wait_random_exponential(multiplier=1, min=1, max=10),
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
