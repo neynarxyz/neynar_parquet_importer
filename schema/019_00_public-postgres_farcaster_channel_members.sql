@@ -1,6 +1,3 @@
--- TODO: if the OLD channel_members table exists (check for "id" being a SERIAL), then DROP it!
--- TODO: then, we need to send channel_members from s3 into google public postgres
-
 DO $$
 BEGIN
     -- Check if replicator_v1's old seq exists
