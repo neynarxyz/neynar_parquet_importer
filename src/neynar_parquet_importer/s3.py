@@ -1,4 +1,4 @@
-from functools import lru_cache
+from functools import cache
 import os
 import re
 import boto3
@@ -78,18 +78,14 @@ def download_latest_full(
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
-    # TODO: split this here into a "find_latest_full" function and a "download_full" function
-    progress_callback.more_steps(latest_size_bytes)
-
-    LOGGER.info(
-        "Downloading the latest full backup", extra={"full_path": local_file_path}
-    )
-    # TODO: download to a temporary directory so that we can resume if it partially exists
-    s3_client.download_file(
-        settings.parquet_s3_bucket,
-        s3_prefix + full_name,
+    resumable_download(
+        s3_client,
+        s3_prefix,
+        full_name,
         local_file_path,
-        Callback=progress_callback,
+        progress_callback,
+        latest_size_bytes,
+        settings,
     )
 
     return local_file_path
@@ -159,25 +155,68 @@ def download_incremental(
         empty_steps_progress.more_steps(1)
         return local_empty_path
 
-    bytes_downloaded_progress.more_steps(latest_size_bytes)
-
-    # TODO: resumable downloads using the same helper function that we use for full backups
-    s3_client.download_file(
-        settings.parquet_s3_bucket,
-        incremental_s3_prefix + parquet_name,
+    resumable_download(
+        s3_client,
+        incremental_s3_prefix,
+        parquet_name,
         local_parquet_path,
-        Callback=bytes_downloaded_progress,
+        bytes_downloaded_progress,
+        latest_size_bytes,
+        settings,
     )
-    LOGGER.info("Downloaded: %s", local_parquet_path)
 
     return local_parquet_path
+
+
+def resumable_download(
+    s3_client,
+    s3_prefix,
+    s3_key,
+    target_path,
+    bytes_downloaded_progress,
+    source_size_bytes,
+    settings: Settings,
+):
+    incoming_path = target_path + ".incoming"
+
+    if os.path.exists(incoming_path):
+        incoming_size = os.path.getsize(incoming_path)
+    else:
+        incoming_size = 0
+
+    if incoming_size > source_size_bytes:
+        raise ValueError("Downloaded file is larger than expected", incoming_path)
+
+    if incoming_size < source_size_bytes:
+        bytes_downloaded_progress.more_steps(source_size_bytes - incoming_size)
+
+        range_header = f"bytes={incoming_size}-{source_size_bytes}"
+
+        response = s3_client.get_object(
+            Bucket=settings.parquet_s3_bucket,
+            Key=s3_prefix + s3_key,
+            Range=range_header,
+        )
+
+        # TODO: resumable downloads! use download_file_obj?
+        with open(incoming_path, "ab") as f:
+            for chunk in response["Body"].iter_chunks(1024 * 1024):  # 1MB chunks
+                f.write(chunk)
+                bytes_downloaded_progress(len(chunk))
+
+    if os.path.getsize(incoming_path) != source_size_bytes:
+        raise ValueError("Downloaded file is not the expected size", incoming_path)
+
+    os.rename(incoming_path, target_path)
+
+    LOGGER.info("Downloaded: %s", target_path)
 
 
 def get_s3_client(settings: Settings):
     return _get_s3_client(settings.s3_pool_size)
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_s3_client(max_pool_connections):
     # TODO: read things from Settings to configure this session's profile_name
     session = boto3.Session()
