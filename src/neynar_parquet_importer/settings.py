@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     postgres_poolclass: str = "QueuePool"
     postgres_pool_size: int = 50
     postgres_schema: str = "public"
-    row_workers: int = 5
+    row_workers: int = 4
     s3_pool_size: int = 100
     target_name: str = "unknown"
 

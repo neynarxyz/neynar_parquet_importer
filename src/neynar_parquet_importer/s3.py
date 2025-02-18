@@ -1,4 +1,4 @@
-from functools import cache
+from functools import cache, lru_cache
 import logging
 import os
 import re
@@ -235,7 +235,7 @@ def get_s3_client(settings: Settings):
     return _get_s3_client(settings.s3_pool_size)
 
 
-@cache
+@lru_cache(maxsize=None)
 def _get_s3_client(max_pool_connections):
     # TODO: read things from Settings to configure this session's profile_name
     session = boto3.Session()
