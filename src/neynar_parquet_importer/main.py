@@ -113,7 +113,7 @@ def sync_parquet_to_db(
 
         if existing_full_result is not None:
             (full_filename, full_completed) = existing_full_result
-            logging.debug(
+            LOGGER.debug(
                 "full found",
                 extra={
                     "table": table.name,
@@ -124,7 +124,7 @@ def sync_parquet_to_db(
 
             last_import_filename = full_filename
         else:
-            logging.debug("no full at all", extra={"table": table.name})
+            LOGGER.debug("no full at all", extra={"table": table.name})
             full_filename = None
             full_completed = False
             last_import_filename = None
@@ -225,7 +225,7 @@ def sync_parquet_to_db(
                         if incremental_filename is None:
                             raise RuntimeError("incremental is None")
 
-                        logging.debug(
+                        LOGGER.debug(
                             "marking completed",
                             extra={"incremental": incremental_filename},
                         )

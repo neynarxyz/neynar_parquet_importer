@@ -203,14 +203,14 @@ def resumable_download(
         key = s3_prefix + s3_key
 
         if source_size_bytes == 0:
-            logging.debug(
+            LOGGER.debug(
                 "new download",
                 extra={
                     "key": key,
                 },
             )
         else:
-            logging.debug(
+            LOGGER.debug(
                 "resuming download",
                 extra={
                     "key": key,
