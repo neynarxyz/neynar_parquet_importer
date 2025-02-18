@@ -1,4 +1,4 @@
-from functools import cache, lru_cache
+from functools import lru_cache
 import logging
 import os
 import re
@@ -156,15 +156,22 @@ def download_incremental(
         empty_steps_progress.more_steps(1)
         return local_empty_path
 
-    resumable_download(
-        s3_client,
-        incremental_s3_prefix,
-        parquet_name,
-        local_parquet_path,
-        bytes_downloaded_progress,
-        latest_size_bytes,
-        settings,
+    bytes_downloaded_progress.more_steps(latest_size_bytes)
+
+    incoming_parquet_path = local_parquet_path + ".incoming"
+
+    # resumable downloads here seemed to slow things down.
+    # these files are usually small so its not really worth it anyways
+    s3_client.download_file(
+        settings.parquet_s3_bucket,
+        incremental_s3_prefix + parquet_name,
+        incoming_parquet_path,
+        Callback=bytes_downloaded_progress,
     )
+
+    os.rename(incoming_parquet_path, local_parquet_path)
+
+    LOGGER.info("Downloaded: %s", local_parquet_path)
 
     return local_parquet_path
 
