@@ -248,7 +248,7 @@ def sync_parquet_to_db(
 
             if time.time() < next_start_timestamp:
                 # we'll probably only get here if theres no futures to wait on
-                sleep_amount = next_start_timestamp - time.time()
+                sleep_amount = max(0, next_start_timestamp - time.time())
 
                 if SHUTDOWN_EVENT.wait(sleep_amount):
                     LOGGER.debug(
