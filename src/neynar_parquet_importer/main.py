@@ -212,7 +212,10 @@ def sync_parquet_to_db(
         fs = []
         while not SHUTDOWN_EVENT.is_set():
             # mark files completed in order. this keeps us from skipping items if we have to restart
-            while fs or time.time() < next_start_timestamp:
+            while fs:
+                if time.time() >= next_start_timestamp:
+                    break
+
                 completed_filenames = []
 
                 if fs:
@@ -239,6 +242,17 @@ def sync_parquet_to_db(
                 if SHUTDOWN_EVENT.wait(sleep_amount):
                     LOGGER.debug(
                         "shutting down sync_parquet_to_db",
+                        extra={"table": table.name},
+                    )
+                    return
+
+            if time.time() < next_start_timestamp:
+                # we'll probably only get here if theres no futures to wait on
+                sleep_amount = next_start_timestamp - time.time()
+
+                if SHUTDOWN_EVENT.wait(sleep_amount):
+                    LOGGER.debug(
+                        "shutting down sync_parquet_to_db (no futures)",
                         extra={"table": table.name},
                     )
                     return
