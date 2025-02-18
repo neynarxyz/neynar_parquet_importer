@@ -15,8 +15,7 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.casts
     mentions bigint[] NOT NULL DEFAULT '{}'::bigint[],
     mentions_positions smallint[] NOT NULL DEFAULT '{}'::smallint[],
     root_parent_hash bytea,
-    root_parent_url text COLLATE pg_catalog."default",
-    CONSTRAINT casts_hash_unique UNIQUE (hash)
+    root_parent_url text COLLATE pg_catalog."default"
 );
 
 DO $$
@@ -31,7 +30,7 @@ BEGIN
           AND constraint_type = 'UNIQUE'
     ) THEN
         -- Drop the constraint
-        ALTER TABLE casts DROP CONSTRAINT casts_hash_unique;
+        ALTER TABLE ${POSTGRES_SCHEMA}.casts DROP CONSTRAINT casts_hash_unique;
     END IF;
 END $$;
 
