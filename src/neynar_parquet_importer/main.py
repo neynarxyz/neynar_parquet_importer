@@ -28,7 +28,6 @@ from .db import (
     get_tables,
     import_parquet,
     init_db,
-    raise_any_exceptions,
 )
 from .s3 import (
     download_incremental,
@@ -232,10 +231,10 @@ def sync_parquet_to_db(
 
                 mark_completed(db_engine, parquet_import_tracking, completed_filenames)
 
+                sleep_amount = max(0, next_start_timestamp - time.time())
+
                 if fs:
-                    sleep_amount = max(0, min(1, next_end_timestamp - time.time()))
-                else:
-                    sleep_amount = next_start_timestamp - time.time()
+                    sleep_amount = min(1, sleep_amount)
 
                 if SHUTDOWN_EVENT.wait(sleep_amount):
                     LOGGER.debug(
@@ -243,8 +242,6 @@ def sync_parquet_to_db(
                         extra={"table": table.name},
                     )
                     return
-
-            raise_any_exceptions(fs)
 
             # spawn a task on file_executor here
             f = file_executor.submit(

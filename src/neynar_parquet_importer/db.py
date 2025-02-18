@@ -260,17 +260,6 @@ def get_tables(
     return {table.name: table for table in filtered_tables}
 
 
-def raise_any_exceptions(fs):
-    return
-
-    # TODO: i think we want something like this, but its way too slow
-    for f in fs:
-        if not f.done():
-            continue
-        if f.exception() is not None:
-            f.result()
-
-
 def import_parquet(
     engine,
     table: Table,
@@ -440,8 +429,6 @@ def import_parquet(
 
                 # no need for a timeout here because it is marked done
                 (i, file_age_s, row_age_s, last_updated_at) = f.result()
-
-                raise_any_exceptions(fs)
         except CancelledError:
             LOGGER.debug("cancelled inside import_parquet")
             return
