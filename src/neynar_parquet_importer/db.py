@@ -497,7 +497,7 @@ def sleep_or_raise_shutdown(t):
 
 @retry(
     stop=stop_after_attempt(10),
-    wait=wait_random_exponential(multiplier=1, min=1, max=10),
+    wait=wait_random_exponential(multiplier=0.1, max=10),
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
@@ -511,7 +511,7 @@ def execute_with_retry(engine, stmt):
 
 @retry(
     stop=stop_after_attempt(10),
-    wait=wait_random_exponential(multiplier=1, min=1, max=10),
+    wait=wait_random_exponential(multiplier=0.1, max=10),
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
