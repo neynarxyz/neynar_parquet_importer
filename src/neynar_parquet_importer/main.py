@@ -213,47 +213,34 @@ def sync_parquet_to_db(
         fs = []
         while not SHUTDOWN_EVENT.is_set():
             # mark files completed in order. this keeps us from skipping items if we have to restart
-            completed_filenames = []
-            while fs:
-                if fs[0].done():
-                    f = fs.pop(0)
+            while fs or time.time() < next_start_timestamp:
+                completed_filenames = []
 
-                    incremental_filename = f.result()
+                if fs:
+                    if fs[0].done():
+                        f = fs.pop(0)
 
-                    if incremental_filename is None:
-                        raise RuntimeError("incremental is None")
+                        incremental_filename = f.result()
 
-                    logging.debug(
-                        "marking completed", extra={"incremental": incremental_filename}
-                    )
+                        if incremental_filename is None:
+                            raise RuntimeError("incremental is None")
 
-                    completed_filenames.append(incremental_filename)
-                elif fs[0].cancelled():
-                    LOGGER.debug("cancelled")
-                    return
+                        logging.debug(
+                            "marking completed",
+                            extra={"incremental": incremental_filename},
+                        )
+
+                        completed_filenames.append(incremental_filename)
+                    elif fs[0].cancelled():
+                        LOGGER.debug("cancelled")
+                        return
+
+                mark_completed(db_engine, parquet_import_tracking, completed_filenames)
+
+                if fs:
+                    sleep_amount = max(0, min(1, next_end_timestamp - time.time()))
                 else:
-                    break
-
-            raise_any_exceptions(fs)
-
-            mark_completed(db_engine, parquet_import_tracking, completed_filenames)
-
-            # TODO: if fs is super long, what should we do?
-
-            now = time.time()
-            if now < next_end_timestamp:
-                sleep_amount = next_end_timestamp - now
-
-                # # TODO: this is too verbose
-                # LOGGER.debug(
-                #     "Sleeping until the next incremental is ready",
-                #     extra={
-                #         "table": table_name,
-                #         "next_end": next_end_timestamp,
-                #         "next_start": next_start_timestamp,
-                #         "sleep_amount": sleep_amount,
-                #     },
-                # )
+                    sleep_amount = next_start_timestamp - time.time()
 
                 if SHUTDOWN_EVENT.wait(sleep_amount):
                     LOGGER.debug(
@@ -262,9 +249,9 @@ def sync_parquet_to_db(
                     )
                     return
 
-            # TODO: spawn a task on file_executor here
-            # TODO: have an executor for s3 and another for db?
-            # TODO: how should we handle gaps when we start? i think we need a thread that saves the next start row. have a channel of oneshots?
+            raise_any_exceptions(fs)
+
+            # spawn a task on file_executor here
             f = file_executor.submit(
                 download_and_import_incremental_parquet,
                 db_engine,

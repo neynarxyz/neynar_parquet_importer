@@ -1,4 +1,5 @@
 from functools import cache
+import logging
 import os
 import re
 import boto3
@@ -192,9 +193,27 @@ def resumable_download(
 
         range_header = f"bytes={incoming_size}-{source_size_bytes}"
 
+        key = s3_prefix + s3_key
+
+        if source_size_bytes == 0:
+            logging.debug(
+                "new download",
+                extra={
+                    "key": key,
+                },
+            )
+        else:
+            logging.debug(
+                "resuming download",
+                extra={
+                    "key": key,
+                    "range_header": range_header,
+                },
+            )
+
         response = s3_client.get_object(
             Bucket=settings.parquet_s3_bucket,
-            Key=s3_prefix + s3_key,
+            Key=key,
             Range=range_header,
         )
 
