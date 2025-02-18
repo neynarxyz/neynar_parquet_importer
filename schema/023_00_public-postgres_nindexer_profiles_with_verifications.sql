@@ -45,11 +45,11 @@ BEGIN
                     )
                     ORDER BY v."timestamp" DESC
                 )
-                FROM verifications v
+                FROM ${POSTGRES_SCHEMA}.verifications v
                 WHERE v.fid = p.fid
                 AND v.deleted_at IS NULL
             ) AS verifications
         FROM 
-            profiles p;
+            ${POSTGRES_SCHEMA}.profiles p;
     END IF;
 END $$;

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS parquet_import_tracking (
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.parquet_import_tracking (
     id BIGSERIAL PRIMARY KEY,
     table_name VARCHAR NOT NULL,
     file_name VARCHAR UNIQUE,
@@ -21,10 +21,10 @@ BEGIN
         AND table_schema = '${POSTGRES_SCHEMA}'
         AND column_name = 'completed'
     ) THEN
-        ALTER TABLE parquet_import_tracking
+        ALTER TABLE ${POSTGRES_SCHEMA}.parquet_import_tracking
         ADD COLUMN completed BOOLEAN DEFAULT TRUE;
 
-        ALTER TABLE parquet_import_tracking
+        ALTER TABLE ${POSTGRES_SCHEMA}.parquet_import_tracking
         ALTER COLUMN completed SET DEFAULT FALSE;
     END IF;
 END $$;

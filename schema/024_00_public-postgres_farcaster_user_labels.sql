@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS user_labels
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.user_labels
 (
     id bigint NOT NULL PRIMARY KEY,
     source text COLLATE pg_catalog."default" NOT NULL,

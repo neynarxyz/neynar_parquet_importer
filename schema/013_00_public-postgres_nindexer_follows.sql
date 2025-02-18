@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS follows
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.follows
 (
     id UUID PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -16,10 +16,10 @@ BEGIN
         SELECT 1
         FROM information_schema.columns
         WHERE table_name = 'follows'
-        AND table_schema = '${POSTGRES_SCHEMA}'
-        AND column_name = 'display_timestamp'
+          AND table_schema = '${POSTGRES_SCHEMA}'
+          AND column_name = 'display_timestamp'
     ) THEN
-        ALTER TABLE follows
+        ALTER TABLE ${POSTGRES_SCHEMA}.follows
         ADD COLUMN display_timestamp TIMESTAMP;
     END IF;
 END $$;

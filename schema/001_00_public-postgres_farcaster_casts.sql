@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS casts
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.casts
 (
     id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -26,6 +26,7 @@ BEGIN
         SELECT 1
         FROM information_schema.table_constraints
         WHERE table_name = 'casts'
+          AND table_schema = '${POSTGRES_SCHEMA}'
           AND constraint_name = 'casts_hash_unique'
           AND constraint_type = 'UNIQUE'
     ) THEN

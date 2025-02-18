@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS account_verifications
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.account_verifications
 (
     id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL,

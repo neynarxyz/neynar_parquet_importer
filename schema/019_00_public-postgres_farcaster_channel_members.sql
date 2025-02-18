@@ -19,7 +19,7 @@
 -- END $$;
 
 
-CREATE TABLE IF NOT EXISTS channel_members
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.channel_members
 (
     id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL,
@@ -37,10 +37,11 @@ BEGIN
         SELECT 1
         FROM information_schema.table_constraints
         WHERE table_name = 'channel_members'
+          AND table_schema = '${POSTGRES_SCHEMA}'
           AND constraint_name = 'channel_members_fid_channel_id_unique'
           AND constraint_type = 'UNIQUE'
     ) THEN
         -- Drop the constraint
-        ALTER TABLE channel_members DROP CONSTRAINT channel_members_fid_channel_id_unique;
+        ALTER TABLE ${POSTGRES_SCHEMA}.channel_members DROP CONSTRAINT channel_members_fid_channel_id_unique;
     END IF;
 END $$;

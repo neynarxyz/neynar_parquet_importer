@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS profile_with_addresses
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.profile_with_addresses
 (
     fid bigint NOT NULL PRIMARY KEY,
     fname text COLLATE pg_catalog."default",

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS profiles
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.profiles
 (
     id UUID PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,

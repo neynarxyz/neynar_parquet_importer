@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS reactions
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.reactions
 (
     id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -20,11 +20,12 @@ BEGIN
         SELECT 1
         FROM information_schema.table_constraints
         WHERE table_name = 'reactions'
+          AND table_schema = '${POSTGRES_SCHEMA}'
           AND constraint_name = 'reactions_hash_unique'
           AND constraint_type = 'UNIQUE'
     ) THEN
         -- Drop the constraint
-        ALTER TABLE reactions DROP CONSTRAINT reactions_hash_unique;
+        ALTER TABLE ${POSTGRES_SCHEMA}.reactions DROP CONSTRAINT reactions_hash_unique;
     END IF;
 END $$;
 

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS user_data
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.user_data
 (
     id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -18,6 +18,7 @@ BEGIN
         SELECT 1
         FROM information_schema.table_constraints
         WHERE table_name = 'user_data'
+          AND table_schema = '${POSTGRES_SCHEMA}'
           AND constraint_name = 'user_data_fid_type_unique'
           AND constraint_type = 'UNIQUE'
     ) THEN

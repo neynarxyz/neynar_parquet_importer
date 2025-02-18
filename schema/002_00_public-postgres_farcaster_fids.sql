@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS fids
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.fids
 (
     fid bigint NOT NULL,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,

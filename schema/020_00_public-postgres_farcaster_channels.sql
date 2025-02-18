@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS channels
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.channels
 (
     id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL,

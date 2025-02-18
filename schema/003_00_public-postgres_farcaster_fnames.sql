@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS fnames
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.fnames
 (
     fname text COLLATE pg_catalog."default" NOT NULL,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,

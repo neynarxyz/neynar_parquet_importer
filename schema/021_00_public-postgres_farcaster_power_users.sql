@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS power_users
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.power_users
 (
     fid bigint NOT NULL PRIMARY KEY,
     created_at timestamp without time zone NOT NULL,

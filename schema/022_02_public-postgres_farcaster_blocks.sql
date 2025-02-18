@@ -1,1 +1,1 @@
-CREATE INDEX IF NOT EXISTS blocks_blocked_fid ON blocks (blocked_fid);
+CREATE INDEX IF NOT EXISTS blocks_blocked_fid ON ${POSTGRES_SCHEMA}.blocks (blocked_fid);

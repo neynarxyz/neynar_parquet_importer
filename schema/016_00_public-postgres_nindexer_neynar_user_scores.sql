@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS neynar_user_scores
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.neynar_user_scores
 (
     id UUID PRIMARY KEY,
     fid bigint NOT NULL,
@@ -15,6 +15,7 @@ BEGIN
         SELECT 1
         FROM information_schema.table_constraints
         WHERE table_name = 'neynar_user_scores'
+          AND table_schema = '${POSTGRES_SCHEMA}'
           AND constraint_name = 'neynar_user_scores_fid_key'
           AND constraint_type = 'UNIQUE'
     ) THEN

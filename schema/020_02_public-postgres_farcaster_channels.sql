@@ -1,1 +1,1 @@
-CREATE INDEX IF NOT EXISTS channels_lead_fid ON channels (lead_fid);
+CREATE INDEX IF NOT EXISTS channels_lead_fid ON ${POSTGRES_SCHEMA}.channels (lead_fid);

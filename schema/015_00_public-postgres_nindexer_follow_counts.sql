@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS follow_counts
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.follow_counts
 (
     id UUID PRIMARY KEY,
     fid bigint NOT NULL,
@@ -15,6 +15,7 @@ BEGIN
         SELECT 1
         FROM information_schema.table_constraints
         WHERE table_name = 'follow_counts'
+          AND table_schema = '${POSTGRES_SCHEMA}'
           AND constraint_name = 'follow_counts_fid_key'
           AND constraint_type = 'UNIQUE'
     ) THEN

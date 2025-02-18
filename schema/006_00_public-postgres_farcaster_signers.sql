@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS signers
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.signers
 (
     id bigint PRIMARY KEY,
     created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -20,11 +20,12 @@ BEGIN
         SELECT 1
         FROM information_schema.table_constraints
         WHERE table_name = 'signers'
+          AND table_schema = '${POSTGRES_SCHEMA}'
           AND constraint_name = 'unique_timestamp_fid_signer'
           AND constraint_type = 'UNIQUE'
     ) THEN
         -- Drop the constraint
-        ALTER TABLE signers DROP CONSTRAINT unique_timestamp_fid_signer;
+        ALTER TABLE ${POSTGRES_SCHEMA}.signers DROP CONSTRAINT unique_timestamp_fid_signer;
     END IF;
 END $$;
 

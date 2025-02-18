@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS warpcast_power_users
+CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.warpcast_power_users
 (
     fid bigint NOT NULL PRIMARY KEY,
     created_at timestamp without time zone NOT NULL,
