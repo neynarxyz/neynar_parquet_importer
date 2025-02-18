@@ -4,7 +4,6 @@ import threading
 import time
 import datadog
 from pathlib import Path
-from typing import Optional
 from pydantic import Field, PostgresDsn
 from pydantic_settings import BaseSettings
 
@@ -35,7 +34,7 @@ class Settings(BaseSettings):
     postgres_poolclass: str = "QueuePool"
     postgres_pool_size: int = 50
     postgres_schema: str = "public"
-    row_workers: int = 4
+    row_workers: int = 5
     s3_pool_size: int = 100
     target_name: str = "unknown"
 
