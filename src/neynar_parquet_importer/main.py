@@ -22,8 +22,8 @@ from sqlalchemy import update
 
 from .progress import ProgressCallback
 from .db import (
-    check_for_existing_full_import,
-    check_for_existing_incremental_import,
+    check_for_past_full_import,
+    check_for_past_incremental_import,
     execute_with_retry,
     get_tables,
     import_parquet,
@@ -104,55 +104,80 @@ def sync_parquet_to_db(
 
         s3_client = get_s3_client(settings)
 
-        incremental_filename = check_for_existing_incremental_import(
+        existing_full_result = check_for_past_full_import(
             db_engine,
             parquet_import_tracking,
             settings,
             table,
         )
-        if incremental_filename:
-            # if we have imported an incremental, then we should start there instead of at the full
-            if not os.path.exists(incremental_filename):
-                last_start_timestamp = parse_parquet_filename(incremental_filename)[
-                    "start_timestamp"
-                ]
 
-                incremental_filename = download_incremental(
-                    s3_client,
-                    settings,
-                    table,
-                    last_start_timestamp,
-                    progress_callbacks["incremental_bytes"],
-                    progress_callbacks["empty_steps"],
-                )
+        if existing_full_result is not None:
+            (full_filename, full_completed) = existing_full_result
+            logging.debug(
+                "full found",
+                extra={
+                    "table": table.name,
+                    "full_filename": full_filename,
+                    "completed": full_completed,
+                },
+            )
 
-            if incremental_filename:
-                import_parquet(
-                    db_engine,
-                    table,
-                    incremental_filename,
-                    "incremental",
-                    progress_callbacks["incremental_steps"],
-                    progress_callbacks["empty_steps"],
-                    parquet_import_tracking,
-                    row_group_executor,
-                    settings,
-                )
+            last_import_filename = full_filename
+        else:
+            logging.debug("no full at all", extra={"table": table.name})
+            full_filename = None
+            full_completed = False
+            last_import_filename = None
 
-                last_import_filename = incremental_filename
-
-        if last_import_filename is None:
-            # no incrementals yet (or a very old one), start with the newest full file
-            full_filename = check_for_existing_full_import(
+        if full_completed:
+            # if we have a completed full, we probably have incrementals
+            incremental_filename = check_for_past_incremental_import(
                 db_engine,
                 parquet_import_tracking,
                 settings,
                 table,
             )
 
+            if incremental_filename:
+                # if we have imported an incremental. we should start there instead of at the full
+                if not os.path.exists(incremental_filename):
+                    last_start_timestamp = parse_parquet_filename(incremental_filename)[
+                        "start_timestamp"
+                    ]
+
+                    incremental_filename = download_incremental(
+                        s3_client,
+                        settings,
+                        table,
+                        last_start_timestamp,
+                        progress_callbacks["incremental_bytes"],
+                        progress_callbacks["empty_steps"],
+                    )
+
+                if incremental_filename:
+                    import_parquet(
+                        db_engine,
+                        table,
+                        incremental_filename,
+                        "incremental",
+                        progress_callbacks["incremental_steps"],
+                        progress_callbacks["empty_steps"],
+                        parquet_import_tracking,
+                        row_group_executor,
+                        settings,
+                    )
+
+                    last_import_filename = incremental_filename
+
+                    mark_completed(
+                        db_engine, parquet_import_tracking, [incremental_filename]
+                    )
+                else:
+                    raise ValueError("incremental_filename is missing")
+        else:
+            # the full is not completed (or not even started). start there
             # TODO: spawn this so we can check for incrementals while this is downloading
-            # TODO: if we spawn this, we need to be sure we handle "mark_completed" properly. right now we would skip to incrementals
-            if full_filename is None or not os.path.exists(full_filename):
+            if full_filename is None:
                 # if no full export, download the latest one
                 full_filename = download_latest_full(
                     s3_client,
@@ -174,7 +199,7 @@ def sync_parquet_to_db(
             )
 
             mark_completed(db_engine, parquet_import_tracking, [full_filename])
-
+            full_completed = True
             last_import_filename = full_filename
 
         next_start_timestamp = parse_parquet_filename(last_import_filename)[
@@ -197,6 +222,10 @@ def sync_parquet_to_db(
 
                     if incremental_filename is None:
                         raise RuntimeError("incremental is None")
+
+                    logging.debug(
+                        "marking completed", extra={"incremental": incremental_filename}
+                    )
 
                     completed_filenames.append(incremental_filename)
                 elif fs[0].cancelled():
@@ -281,10 +310,10 @@ def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
         .values(completed=True)
     )
 
-    return execute_with_retry(db_engine, stmt)
-
     # this is too verbose
-    # LOGGER.debug("completed", extra={"files": completed_filenames})
+    LOGGER.debug("completed", extra={"files": completed_filenames})
+
+    return execute_with_retry(db_engine, stmt)
 
 
 def download_and_import_incremental_parquet(

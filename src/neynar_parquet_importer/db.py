@@ -116,27 +116,6 @@ def init_db(uri, parquet_tables, settings: Settings):
     LOGGER.info("Connecting to the database for migrations")
 
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        # set the schema if we have one configured. otherwise everything goes into "public"
-        if settings.postgres_schema and settings.postgres_schema != "public":
-            # # TODO: make this optional
-            # LOGGER.debug("create schema if not exists", extra={"schema": settings.postgres_schema})
-            # create_query = text(
-            #     f"CREATE SCHEMA IF NOT EXISTS {settings.postgres_schema};"
-            # )
-            # conn.execute(create_query)
-
-            # # TODO: make this optional
-            # LOGGER.debug("alter", extra={"user": "your-user", "schema": settings.postgres_schema})
-            # alter_query = text(
-            #     f"ALTER USER your-user set SEARCH_PATH = '{settings.postgres_schema}';"
-            # )
-            # conn.execute(alter_query)
-
-            # TODO: i don't love this. theres probably a much better way to set set the search path
-            # TODO: i think we need to replace custom schema in the .sql files
-            schema_query = text(f"SET search_path TO {settings.postgres_schema};")
-            conn.execute(schema_query)
-
         for i, migration in enumerate(migrations):
             LOGGER.info("applying migration", extra={"i": i})
             LOGGER.debug(
@@ -149,15 +128,17 @@ def init_db(uri, parquet_tables, settings: Settings):
     return engine
 
 
-def check_for_existing_incremental_import(
+def check_for_past_incremental_import(
     engine,
     parquet_import_tracking: Table,
     settings: Settings,
     table: Table,
 ):
-    """Returns the filename for the newest incremental. This may only be partially imported."""
+    """
+    Returns the filename for the newest completed incremental.
+    There may be some partially imported files after this.
+    """
 
-    # TODO: make this much smarter. it needs to find the last one that was fully imported. there might be holes if we run things in parallel!
     stmt = (
         select(
             parquet_import_tracking.c.file_name,
@@ -168,6 +149,7 @@ def check_for_existing_incremental_import(
         .where(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
         )
+        .where(parquet_import_tracking.c.completed.is_(True))
         .order_by(parquet_import_tracking.c.imported_at.desc())
         .limit(1)
     )
@@ -199,7 +181,7 @@ def check_for_existing_incremental_import(
     return latest_filename
 
 
-def check_for_existing_full_import(
+def check_for_past_full_import(
     engine, parquet_import_tracking: Table, settings: Settings, table: Table
 ):
     """Returns the filename of the newest full import (there should really only be one). This may only be partially imported."""
@@ -207,6 +189,7 @@ def check_for_existing_full_import(
     stmt = (
         select(
             parquet_import_tracking.c.file_name,
+            parquet_import_tracking.c.completed,
         )
         .where(parquet_import_tracking.c.file_type == "full")
         .where(parquet_import_tracking.c.table_name == table.name)
@@ -224,17 +207,19 @@ def check_for_existing_full_import(
         return None
 
     latest_filename = result[0]
+    completed = result[1]
 
-    parsed_filename = parse_parquet_filename(latest_filename)
+    # # TODO: think about this more. we might need to check that our full is completed
+    # parsed_filename = parse_parquet_filename(latest_filename)
+    #
+    # if parsed_filename["end_timestamp"] <= maximum_parquet_age():
+    #     LOGGER.warning(
+    #         "Skipping full file because it is too old",
+    #         extra={"file": latest_filename},
+    #     )
+    #     return None
 
-    if parsed_filename["end_timestamp"] <= maximum_parquet_age():
-        LOGGER.warning(
-            "Skipping full file because it is too old",
-            extra={"file": latest_filename},
-        )
-        return None
-
-    return latest_filename
+    return (latest_filename, completed)
 
 
 def clean_parquet_data(col_name, value):
