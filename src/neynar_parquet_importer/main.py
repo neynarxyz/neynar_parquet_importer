@@ -225,11 +225,6 @@ def sync_parquet_to_db(
                         if incremental_filename is None:
                             raise RuntimeError("incremental is None")
 
-                        LOGGER.debug(
-                            "marking completed",
-                            extra={"incremental": incremental_filename},
-                        )
-
                         completed_filenames.append(incremental_filename)
                     elif fs[0].cancelled():
                         LOGGER.debug("cancelled")
@@ -297,8 +292,8 @@ def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
         .values(completed=True)
     )
 
-    # this is too verbose
-    LOGGER.debug("completed", extra={"files": completed_filenames})
+    # # this is too verbose
+    # LOGGER.debug("completed", extra={"files": completed_filenames})
 
     return execute_with_retry(db_engine, stmt)
 
