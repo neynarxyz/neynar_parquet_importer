@@ -32,9 +32,9 @@ class Settings(BaseSettings):
     postgres_dsn: PostgresDsn = "postgresql+psycopg://postgres:postgres@localhost:15432/example_neynar_parquet_importer"
     postgres_max_overflow: int = 10
     postgres_poolclass: str = "QueuePool"
-    postgres_pool_size: int = 50
+    postgres_pool_size: int = 90
     postgres_schema: str = "public"
-    row_workers: int = 4
+    row_workers: int = 10
     s3_pool_size: int = 100
     target_name: str = "unknown"
 
@@ -72,6 +72,7 @@ class Settings(BaseSettings):
         )
 
     def setup_logging(self):
+        # TODO: we should have a logger that sends to statsd so it keeps the tags. the tags get lost
         setup_logging(self.log_level, self.log_format)
 
         logging.getLogger("app").setLevel(self.log_level)

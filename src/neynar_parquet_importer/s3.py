@@ -218,6 +218,7 @@ def resumable_download(
                 },
             )
 
+        # TODO: i think this might be slow. i think we need to split this into multiple downloads and run them in parallel
         response = s3_client.get_object(
             Bucket=settings.parquet_s3_bucket,
             Key=key,

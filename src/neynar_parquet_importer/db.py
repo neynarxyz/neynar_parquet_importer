@@ -150,7 +150,7 @@ def check_for_past_incremental_import(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
         )
         .where(parquet_import_tracking.c.completed.is_(True))
-        .order_by(parquet_import_tracking.c.imported_at.desc())
+        .order_by(parquet_import_tracking.c.file_name.desc())
         .limit(1)
     )
 
@@ -197,7 +197,7 @@ def check_for_past_full_import(
         .where(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
         )
-        .order_by(parquet_import_tracking.c.imported_at.desc())
+        .order_by(parquet_import_tracking.c.file_name.desc())
         .limit(1)
     )
 

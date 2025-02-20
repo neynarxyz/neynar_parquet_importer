@@ -98,6 +98,7 @@ def sync_parquet_to_db(
 
     TODO: run downloads and imports in parallel to improve initial sync times
     """
+    completed_filenames = []
     try:
         last_import_filename = None
 
@@ -206,56 +207,49 @@ def sync_parquet_to_db(
         ]
         next_end_timestamp = next_start_timestamp + settings.incremental_duration
 
-        max_wait_duration = max(60, 4 * settings.incremental_duration)
+        max_wait_duration = max(90, 4 * settings.incremental_duration)
 
         # download all the incrementals. loops forever
         fs = []
         while not SHUTDOWN_EVENT.is_set():
             # mark files completed in order. this keeps us from skipping items if we have to restart
             while fs:
-                if time.time() >= next_start_timestamp:
-                    break
+                if fs[0].done():
+                    f = fs.pop(0)
 
-                completed_filenames = []
+                    incremental_filename = f.result()
 
-                if fs:
-                    if fs[0].done():
-                        f = fs.pop(0)
+                    if incremental_filename is None:
+                        raise RuntimeError("incremental is None")
 
-                        incremental_filename = f.result()
-
-                        if incremental_filename is None:
-                            raise RuntimeError("incremental is None")
-
-                        completed_filenames.append(incremental_filename)
-                    elif fs[0].cancelled():
-                        LOGGER.debug("cancelled")
-                        return
-
-                mark_completed(db_engine, parquet_import_tracking, completed_filenames)
-
-                sleep_amount = max(0, next_start_timestamp - time.time())
-
-                if fs:
-                    sleep_amount = min(1, sleep_amount)
-
-                if SHUTDOWN_EVENT.wait(sleep_amount):
-                    LOGGER.debug(
-                        "shutting down sync_parquet_to_db",
-                        extra={"table": table.name},
-                    )
+                    completed_filenames.append(incremental_filename)
+                elif fs[0].cancelled():
+                    LOGGER.debug("cancelled")
                     return
+                else:
+                    # logging.DEBUG(
+                    #     "waiting for future to complete",
+                    #     # extra={"f": fs[0]},
+                    # )
+                    if time.time() >= next_start_timestamp:
+                        # time to spawn the next file
+                        break
 
-            if time.time() < next_start_timestamp:
-                # we'll probably only get here if theres no futures to wait on
-                sleep_amount = max(0, next_start_timestamp - time.time())
+            mark_completed(db_engine, parquet_import_tracking, completed_filenames)
+            completed_filenames.clear()
 
-                if SHUTDOWN_EVENT.wait(sleep_amount):
-                    LOGGER.debug(
-                        "shutting down sync_parquet_to_db (no futures)",
-                        extra={"table": table.name},
-                    )
-                    return
+            sleep_amount = max(0, next_start_timestamp - time.time())
+
+            if fs:
+                # sleep a maximum of one second since we should loop to see if tasks are done
+                sleep_amount = min(1, sleep_amount)
+
+            if SHUTDOWN_EVENT.wait(sleep_amount):
+                LOGGER.debug(
+                    "shutting down sync_parquet_to_db",
+                    extra={"table": table.name},
+                )
+                return
 
             # spawn a task on file_executor here
             f = file_executor.submit(
@@ -289,6 +283,19 @@ def sync_parquet_to_db(
         SHUTDOWN_EVENT.set()
         raise
     finally:
+        # don't lose any progress
+        if completed_filenames:
+            logging.info(
+                "final mark_completed",
+                extra={
+                    "table": table.name,
+                    "last_file": completed_filenames[-1],
+                    "num_files": len(completed_filenames),
+                },
+            )
+            mark_completed(db_engine, parquet_import_tracking, completed_filenames)
+            completed_filenames.clear()
+
         # this should run forever. any exit here means we should shut down the whole app
         SHUTDOWN_EVENT.set()
 
@@ -304,7 +311,13 @@ def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
     )
 
     # # this is too verbose
-    # LOGGER.debug("completed", extra={"files": completed_filenames})
+    LOGGER.debug(
+        "completed",
+        extra={
+            "last_file": completed_filenames[-1],
+            "num_files": len(completed_filenames),
+        },
+    )
 
     return execute_with_retry(db_engine, stmt)
 
