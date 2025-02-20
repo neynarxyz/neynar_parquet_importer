@@ -220,7 +220,7 @@ def sync_parquet_to_db(
                     incremental_filename = f.result()
 
                     if incremental_filename is None:
-                        raise RuntimeError("incremental is None")
+                        raise ShuttingDown("incremental_filename is None")
 
                     completed_filenames.append(incremental_filename)
                 elif fs[0].cancelled():
