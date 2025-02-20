@@ -31,6 +31,7 @@ def parse_parquet_filename(filename):
 
 
 def download_latest_full(
+    download_threadpool: ThreadPoolExecutor,
     s3_client,
     settings: Settings,
     table: Table,
@@ -82,8 +83,6 @@ def download_latest_full(
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
-    download_threadpool = ThreadPoolExecutor(max_workers=8)
-
     resumable_download(
         s3_client,
         latest_file["Key"],
@@ -98,6 +97,7 @@ def download_latest_full(
 
 
 def download_incremental(
+    download_threadpool: ThreadPoolExecutor,
     s3_client,
     settings: Settings,
     table: Table,
@@ -154,29 +154,22 @@ def download_incremental(
 
     head_object = contents[0]
 
-    latest_size_bytes = head_object["Size"]
+    final_size_bytes = head_object["Size"]
 
-    if latest_size_bytes == 0:
+    if final_size_bytes == 0:
         # we should probably check the name, but this seems fine
         empty_steps_progress.more_steps(1)
         return local_empty_path
 
-    bytes_downloaded_progress.more_steps(latest_size_bytes)
-
-    incoming_parquet_path = local_parquet_path + ".incoming"
-
-    # resumable downloads here seemed to slow things down.
-    # these files are usually small so its not really worth it anyways
-    s3_client.download_file(
-        settings.parquet_s3_bucket,
-        incremental_s3_prefix + parquet_name,
-        incoming_parquet_path,
-        Callback=bytes_downloaded_progress,
+    resumable_download(
+        s3_client,
+        head_object["Key"],
+        local_parquet_path,
+        bytes_downloaded_progress,
+        final_size_bytes,
+        settings,
+        download_threadpool,
     )
-
-    os.rename(incoming_parquet_path, local_parquet_path)
-
-    LOGGER.info("Downloaded: %s", local_parquet_path)
 
     return local_parquet_path
 
@@ -266,8 +259,6 @@ def resumable_download(
     os.rename(incoming_path, local_file_path)
 
     logging.debug("Finished downloading: %s", local_file_path)
-
-    raise NotImplementedError
 
 
 def _resumable_download_chunk(

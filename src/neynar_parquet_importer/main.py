@@ -87,6 +87,7 @@ ALL_VIEWS = {
 
 def sync_parquet_to_db(
     db_engine,
+    download_threadpool: ThreadPoolExecutor,
     file_executor,
     row_group_executor,
     table,
@@ -146,6 +147,7 @@ def sync_parquet_to_db(
                     ]
 
                     incremental_filename = download_incremental(
+                        download_threadpool,
                         s3_client,
                         settings,
                         table,
@@ -180,6 +182,7 @@ def sync_parquet_to_db(
             if full_filename is None:
                 # if no full export, download the latest one
                 full_filename = download_latest_full(
+                    download_threadpool,
                     s3_client,
                     settings,
                     table,
@@ -255,6 +258,7 @@ def sync_parquet_to_db(
             f = file_executor.submit(
                 download_and_import_incremental_parquet,
                 db_engine,
+                download_threadpool,
                 s3_client,
                 table,
                 max_wait_duration,
@@ -326,6 +330,7 @@ def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
 
 def download_and_import_incremental_parquet(
     db_engine,
+    download_threadpool: ThreadPoolExecutor,
     s3_client,
     table: Table,
     max_wait_duration,
@@ -366,6 +371,7 @@ def download_and_import_incremental_parquet(
                     )
 
             incremental_filename = download_incremental(
+                download_threadpool,
                 s3_client,
                 settings,
                 table,
@@ -553,6 +559,15 @@ def main(settings: Settings):
                 )
                 for table_name in table_names
             }
+            download_executors = {
+                table_name: stack.enter_context(
+                    ThreadPoolExecutor(
+                        max_workers=settings.download_workers,
+                        thread_name_prefix=f"{table_name}Download",
+                    )
+                )
+                for table_name in table_names
+            }
             row_group_executors = {
                 table_name: stack.enter_context(
                     ThreadPoolExecutor(
@@ -592,6 +607,7 @@ def main(settings: Settings):
                 table_executor.submit(
                     sync_parquet_to_db,
                     db_engine,
+                    download_executors[table_name],
                     file_executors[table_name],
                     row_group_executors[table_name],
                     tables[table_name],

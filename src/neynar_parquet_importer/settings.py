@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     views: str = ""
 
     datadog_enabled: bool = True
+    download_workers: int = 16
     exit_after_max_wait: bool = False  # TODO: improve this more
     file_workers: int = 4
     incremental_duration: int = Field(300, alias="npe_duration")
