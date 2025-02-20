@@ -1,7 +1,10 @@
-from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import cache
 import logging
+import math
 import os
 import re
+import shutil
 import boto3
 from botocore.config import Config
 from sqlalchemy import Table
@@ -79,14 +82,16 @@ def download_latest_full(
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
+    download_threadpool = ThreadPoolExecutor(max_workers=8)
+
     resumable_download(
         s3_client,
-        s3_prefix,
-        full_name,
+        latest_file["Key"],
         local_file_path,
         progress_callback,
         latest_size_bytes,
         settings,
+        download_threadpool,
     )
 
     return local_file_path
@@ -176,44 +181,133 @@ def download_incremental(
     return local_parquet_path
 
 
+def get_chunk_ranges(
+    total_bytes: int, max_chunks: int = 8, min_chunk_size: int = 8 * 1024 * 1024
+) -> list[tuple[int, int]]:
+    """
+    Divide [start_byte, end_byte] into up to `max_chunks` parts,
+    each part being at least `min_chunk_size` in length (except possibly the last).
+    Returns a list of (start, end) inclusive ranges.
+    """
+    start_byte = 0
+    end_byte = int(total_bytes - 1)
+
+    # Determine chunk size, ensuring we don't go below min_chunk_size
+    chunk_size = int(max(min_chunk_size, math.ceil(total_bytes / max_chunks)))
+
+    ranges = []
+    current_start = start_byte
+    while current_start <= end_byte:
+        current_end = int(min(current_start + chunk_size - 1, end_byte))
+        ranges.append((current_start, current_end))
+        current_start = current_end + 1
+
+    if not ranges:
+        raise ValueError("unable to calculate ranges")
+
+    return ranges
+
+
 def resumable_download(
     s3_client,
-    s3_prefix,
     s3_key,
-    target_path,
+    local_file_path,
+    progress_callback,
+    final_size_bytes,
+    settings: Settings,
+    threadpool: ThreadPoolExecutor,
+):
+    ranges = get_chunk_ranges(final_size_bytes, max_chunks=threadpool._max_workers)
+
+    logging.debug("ranges: %s", ranges)
+
+    incoming_path = local_file_path + ".incoming"
+
+    if len(ranges) == 1:
+        logging.debug("only one chunk")
+        _resumable_download_chunk(
+            s3_client,
+            s3_key,
+            incoming_path,
+            progress_callback,
+            ranges[0][0],
+            ranges[0][1],
+            settings,
+        )
+    else:
+        logging.debug("parallel download")
+        fs = [
+            threadpool.submit(
+                _resumable_download_chunk,
+                s3_client,
+                s3_key,
+                local_file_path + f".incoming{i}",
+                progress_callback,
+                r[0],
+                r[1],
+                settings,
+            )
+            for (i, r) in enumerate(ranges)
+        ]
+
+        # make sure local_file_path exists with the right size
+        with open(incoming_path, "wb") as wfd:
+            # we could do these as completed, but thats more complex
+            for f in fs:
+                chunk_path = f.result()
+
+                logging.debug("Merging chunk: %s", chunk_path)
+
+                with open(chunk_path, "rb") as rfd:
+                    shutil.copyfileobj(rfd, wfd)
+
+    if os.path.getsize(incoming_path) != final_size_bytes:
+        raise ValueError("Downloaded file is not the expected size", incoming_path)
+
+    os.rename(incoming_path, local_file_path)
+
+    logging.debug("Finished downloading: %s", local_file_path)
+
+    raise NotImplementedError
+
+
+def _resumable_download_chunk(
+    s3_client,
+    s3_key,
+    chunk_path,
     bytes_downloaded_progress,
-    source_size_bytes,
+    chunk_start,
+    chunk_end,
     settings: Settings,
 ):
-    incoming_path = target_path + ".incoming"
+    final_size = chunk_end - chunk_start + 1
 
-    if os.path.exists(incoming_path):
-        incoming_size = os.path.getsize(incoming_path)
+    if os.path.exists(chunk_path):
+        start_size = os.path.getsize(chunk_path)
     else:
-        incoming_size = 0
+        start_size = 0
 
-    if incoming_size > source_size_bytes:
-        raise ValueError("Downloaded file is larger than expected", incoming_path)
+    if start_size > final_size:
+        raise ValueError("Downloaded file is larger than expected", chunk_path)
 
-    if incoming_size < source_size_bytes:
-        bytes_downloaded_progress.more_steps(source_size_bytes - incoming_size)
+    if start_size < final_size:
+        bytes_downloaded_progress.more_steps(final_size - start_size)
 
-        range_header = f"bytes={incoming_size}-{source_size_bytes}"
+        range_header = f"bytes={chunk_start}-{chunk_end}"
 
-        key = s3_prefix + s3_key
-
-        if source_size_bytes == 0:
+        if start_size == 0:
             LOGGER.debug(
                 "new download",
                 extra={
-                    "key": key,
+                    "key": s3_key,
+                    "range_header": range_header,
                 },
             )
         else:
             LOGGER.debug(
                 "resuming download",
                 extra={
-                    "key": key,
+                    "key": s3_key,
                     "range_header": range_header,
                 },
             )
@@ -221,29 +315,28 @@ def resumable_download(
         # TODO: i think this might be slow. i think we need to split this into multiple downloads and run them in parallel
         response = s3_client.get_object(
             Bucket=settings.parquet_s3_bucket,
-            Key=key,
+            Key=s3_key,
             Range=range_header,
         )
 
-        # TODO: resumable downloads! use download_file_obj?
-        with open(incoming_path, "ab") as f:
-            for chunk in response["Body"].iter_chunks(1024 * 1024):  # 1MB chunks
+        with open(chunk_path, "ab") as f:
+            for chunk in response["Body"].iter_chunks(256 * 1024):  # 256KB chunks
                 f.write(chunk)
                 bytes_downloaded_progress(len(chunk))
 
-    if os.path.getsize(incoming_path) != source_size_bytes:
-        raise ValueError("Downloaded file is not the expected size", incoming_path)
+    if os.path.getsize(chunk_path) != final_size:
+        raise ValueError("Downloaded file is not the expected size", chunk_path)
 
-    os.rename(incoming_path, target_path)
+    LOGGER.info("Finished downloading: %s", chunk_path)
 
-    LOGGER.info("Downloaded: %s", target_path)
+    return chunk_path
 
 
 def get_s3_client(settings: Settings):
     return _get_s3_client(settings.s3_pool_size)
 
 
-@lru_cache(maxsize=None)
+@cache
 def _get_s3_client(max_pool_connections):
     # TODO: read things from Settings to configure this session's profile_name
     session = boto3.Session()
