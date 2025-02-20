@@ -235,7 +235,6 @@ def resumable_download(
             settings,
         )
     else:
-        logging.debug("parallel download")
         fs = [
             threadpool.submit(
                 _resumable_download_chunk,

@@ -4,7 +4,7 @@ Globals and helpers that are used across the app. You shouldn't need to modify a
 
 from multiprocessing import Value
 
-from neynar_parquet_importer.settings import SHUTDOWN_EVENT
+from neynar_parquet_importer.settings import SHUTDOWN_EVENT, ShuttingDown
 
 
 class ProgressCallback:
@@ -23,7 +23,7 @@ class ProgressCallback:
             self.progress.update(self.task_id, advance=advance)
 
         if SHUTDOWN_EVENT.is_set():
-            raise ValueError("Shutting down during progress update")
+            raise ShuttingDown("Shutting down during progress update")
 
     def more_steps(self, more_steps):
         if self.enabled:

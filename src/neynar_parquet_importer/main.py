@@ -35,7 +35,7 @@ from .s3 import (
     get_s3_client,
     parse_parquet_filename,
 )
-from .settings import SHUTDOWN_EVENT, Settings
+from .settings import SHUTDOWN_EVENT, Settings, ShuttingDown
 
 LOGGER = logging.getLogger("app")
 
@@ -268,6 +268,8 @@ def sync_parquet_to_db(
 
             next_start_timestamp += settings.incremental_duration
             next_end_timestamp += settings.incremental_duration
+    except ShuttingDown:
+        return
     except Exception as e:
         if e.args == ("cannot schedule new futures after shutdown",):
             LOGGER.debug(
@@ -409,6 +411,8 @@ def download_and_import_incremental_parquet(
         # we got a file. reset max wait
         if max_wait_duration:
             max_wait = time.time() + max_wait_duration
+    except ShuttingDown:
+        return
     except Exception as e:
         if e.args == ("cannot schedule new futures after shutdown",):
             LOGGER.debug("Executor is shutting down during sync_parquet_to_db")

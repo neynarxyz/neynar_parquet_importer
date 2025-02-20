@@ -12,6 +12,10 @@ from neynar_parquet_importer.logger import setup_logging
 SHUTDOWN_EVENT = threading.Event()
 
 
+class ShuttingDown(Exception):
+    pass
+
+
 class Settings(BaseSettings):
     # TODO: whats the best way to take a comma seperated list of tables and convert it to a set? <https://github.com/pydantic/pydantic-settings/issues/291>
     tables: str = ""
