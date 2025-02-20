@@ -151,8 +151,7 @@ def check_for_past_incremental_import(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
         )
         .where(parquet_import_tracking.c.completed.is_(True))
-        # TODO: after we run for a little bit of inserting the imported_at as the end_timestamp, then
-        .order_by(parquet_import_tracking.c.file_name.desc())
+        .order_by(parquet_import_tracking.c.end_timestamp.desc())
         .limit(1)
     )
 
