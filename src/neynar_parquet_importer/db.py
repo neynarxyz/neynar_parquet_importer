@@ -198,7 +198,7 @@ def check_for_past_full_import(
         .where(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
         )
-        .order_by(parquet_import_tracking.c.file_name.desc())
+        .order_by(parquet_import_tracking.c.end_timestamp.desc())
         .limit(1)
     )
 
