@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import logging
 from datadog import statsd
 import glob
-import json
+import orjson
 from os import path
 import re
 from time import time
@@ -225,7 +225,7 @@ def check_for_past_full_import(
 
 def clean_parquet_data(col_name, value):
     if col_name in JSON_COLUMNS:
-        return json.loads(value)
+        return orjson.loads(value)
     # TODO: if this is a datetime column, it is from parquet in milliseconds, not seconds!
     return value
 
