@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.parquet_import_tracking (
     file_version VARCHAR NOT NULL,
     file_duration_s INT NOT NULL,
     is_empty BOOLEAN,
-    imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    end_timestamp TIMESTAMP,
     last_row_group_imported INT DEFAULT NULL,
     total_row_groups INT NOT NULL
 );
@@ -26,5 +26,26 @@ BEGIN
 
         ALTER TABLE ${POSTGRES_SCHEMA}.parquet_import_tracking
         ALTER COLUMN completed SET DEFAULT FALSE;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    -- Rename imported_at to end_timestamp on parquet_import_tracking
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'parquet_import_tracking'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+        AND column_name = 'imported_at'
+    ) THEN
+        ALTER TABLE ${POSTGRES_SCHEMA}.parquet_import_tracking
+        RENAME COLUMN imported_at TO end_timestamp;
+
+        ALTER TABLE ${POSTGRES_SCHEMA}.parquet_import_tracking
+        ALTER COLUMN end_timestamp DROP DEFAULT;
+
+        ALTER INDEX ${POSTGRES_SCHEMA}.idx_parquet_import_tracking_imported_at
+        RENAME TO idx_parquet_import_tracking_end_timestamp;
     END IF;
 END $$;

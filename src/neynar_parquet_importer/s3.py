@@ -217,7 +217,6 @@ def resumable_download(
     incoming_path = local_file_path + ".incoming"
 
     if len(ranges) == 1:
-        logging.debug("only one chunk")
         _resumable_download_chunk(
             s3_client,
             s3_key,

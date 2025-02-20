@@ -1,5 +1,6 @@
 import atexit
 from concurrent.futures import CancelledError
+from datetime import UTC, datetime
 import logging
 from datadog import statsd
 import glob
@@ -150,6 +151,7 @@ def check_for_past_incremental_import(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
         )
         .where(parquet_import_tracking.c.completed.is_(True))
+        # TODO: after we run for a little bit of inserting the imported_at as the end_timestamp, then
         .order_by(parquet_import_tracking.c.file_name.desc())
         .limit(1)
     )
@@ -296,6 +298,9 @@ def import_parquet(
     # Do NOT put 0 here. That would mean that we already imported row group 0!
     last_row_group_imported = None
 
+    # TODO: rename imported_at to end_timestamp
+    end_timestamp_dt = datetime.fromtimestamp(parsed_filename["end_timestamp"], UTC)
+
     # Prepare the insert statement
     stmt = pg_insert(parquet_import_tracking).values(
         table_name=table.name,
@@ -303,6 +308,7 @@ def import_parquet(
         file_type=file_type,
         file_version=settings.npe_version,
         file_duration_s=settings.incremental_duration,
+        end_timestamp=end_timestamp_dt,
         is_empty=is_empty,
         last_row_group_imported=last_row_group_imported,
         total_row_groups=num_row_groups,
@@ -441,7 +447,7 @@ def import_parquet(
         if num_row_groups > 1:
             LOGGER.info(
                 "Completed upsert #%s/%s for %s",
-                f"{i+1:_}",
+                f"{i + 1:_}",
                 f"{num_row_groups:_}",
                 table.name,
                 extra={
