@@ -210,7 +210,7 @@ def resumable_download(
     settings: Settings,
     threadpool: ThreadPoolExecutor,
 ):
-    ranges = get_chunk_ranges(final_size_bytes, max_chunks=threadpool._max_workers)
+    ranges = get_chunk_ranges(final_size_bytes, max_chunks=8)
 
     logging.debug("ranges: %s", ranges)
 
@@ -282,14 +282,18 @@ def _resumable_download_chunk(
     if start_size < final_size:
         bytes_downloaded_progress.more_steps(final_size - start_size)
 
-        range_header = f"bytes={chunk_start}-{chunk_end}"
+        range_start = chunk_start + start_size
+
+        range_header = f"bytes={range_start}-{chunk_end}"
 
         if start_size == 0:
             LOGGER.debug(
                 "new download",
                 extra={
                     "key": s3_key,
+                    "chunk": chunk_path,
                     "range_header": range_header,
+                    "final_size": final_size,
                 },
             )
         else:
@@ -297,7 +301,10 @@ def _resumable_download_chunk(
                 "resuming download",
                 extra={
                     "key": s3_key,
+                    "chunk": chunk_path,
                     "range_header": range_header,
+                    "start_size": start_size,
+                    "final_size": final_size,
                 },
             )
 

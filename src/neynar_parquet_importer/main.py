@@ -125,7 +125,7 @@ def sync_parquet_to_db(
 
             last_import_filename = full_filename
         else:
-            LOGGER.debug("no full at all", extra={"table": table.name})
+            LOGGER.debug("no full in the tracking table", extra={"table": table.name})
             full_filename = None
             full_completed = False
             last_import_filename = None
