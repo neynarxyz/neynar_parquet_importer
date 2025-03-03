@@ -10,3 +10,5 @@
 
 *.egg-info/
 __pycache__/
+
+/README.md
