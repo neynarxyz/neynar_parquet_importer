@@ -61,13 +61,10 @@ The "messages" table is very large and not available as a parquet file. Reach ou
 
 This example repo was designed to be simple so that you can easily plug it into any existing code that you have. There are lots of improvements on the horizon.
 
-- Skip already imported incrementals instead of checking every file
-- If the schema ever changes, it will likely be necessary to load a "full" backup again. There will be an env var to force this
+- If the schema ever changes, it will likely be necessary to load a "full" backup again. There will be an env var to force this if we need to do this in the future
 - Track SNS queue instead of polling
-- Graceful shutdown (sometimes you will have to hit ctrl+c a bunch of times to exit)
+- Improved graceful shutdown (sometimes you will have to hit ctrl+c a bunch of times to exit)
 - Crontab entry to delete old files
-- "Downloaded:" log message should include file age
-- allow custom postgres schema instead of always putting into `public`
 - Store the ETAG in the database so we can compare file hashes
 - recommended specs/storage for an EC2 server (disk size for parquet files)
 - recommended specs/storage space for postgres cluster (disk size for postgres data)
