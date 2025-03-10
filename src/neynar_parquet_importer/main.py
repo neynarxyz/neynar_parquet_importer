@@ -45,34 +45,34 @@ LOGGER = logging.getLogger("app")
 # NOTE: "messages" is very large and so is not part of parquet exports
 ALL_TABLES = {
     # for these, set `npe_version=v2` `parquet_s3_schema=farcaster` `incremental_duration=300`
-    ("public-postgres", "farcaster"): [
-        "account_verifications",
-        "blocks",
-        "casts",  # NOTE: `casts` is VERY large with LOTS of writes!
-        "channel_follows",
-        "channel_members",
-        "channels",
-        "fids",
-        "fnames",
-        # "links",  # NOTE: please use the nindexer follows table instead
-        "power_users",
-        # "profile_with_addresses",  # NOTE: please use the nindexer profiles_with_verifications VIEW instead
-        "reactions",  # NOTE: `reactions` is VERY large with LOTS of writes!
-        "signers",
-        "storage",
-        "user_data",
-        "user_labels",
-        # "verifications",  # NOTE: please use the nindexer verifications table instead
-        "warpcast_power_users",
-    ],
+    ("public-postgres", "farcaster"): {
+        "account_verifications": {},
+        "blocks": {},
+        "casts": {},  # NOTE: `casts` is VERY large with LOTS of writes!
+        "channel_follows": {},
+        "channel_members": {},
+        "channels": {},
+        "fids": {},
+        "fnames": {},
+        # "links": {},  # NOTE: please use the nindexer follows table instead
+        "power_users": {},
+        # "profile_with_addresses": {},  # NOTE: please use the nindexer profiles_with_verifications VIEW instead
+        "reactions": {},  # NOTE: `reactions` is VERY large with LOTS of writes!
+        "signers": {},
+        "storage": {},
+        "user_data": {},
+        "user_labels": {},
+        # "verifications": {},  # NOTE: please use the nindexer verifications table instead
+        "warpcast_power_users": {},
+    },
     # for these, set `npe_version=v3` `parquet_s3_schema=nindexer` `incremental_duration=1`
-    ("public-postgres", "nindexer"): [
-        # "follow_counts",  # NOTE: this table costs extra. Talk to us if you need it
-        "follows",
-        # "neynar_user_scores",  # NOTE: this table costs extra. Talk to us if you need it
-        "profiles",
-        "verifications",
-    ],
+    ("public-postgres", "nindexer"): {
+        # "follow_counts": {},  # NOTE: this table costs extra. Talk to us if you need it
+        "follows": {},
+        # "neynar_user_scores": {},  # NOTE: this table costs extra. Talk to us if you need it
+        "profiles": {},
+        "verifications": {},
+    },
 }
 
 ALL_VIEWS = {
@@ -508,9 +508,11 @@ def main(settings: Settings):
             if settings.tables:
                 table_names = settings.tables.split(",")
             else:
-                table_names = ALL_TABLES[
-                    (settings.parquet_s3_database, settings.parquet_s3_schema)
-                ]
+                table_names = list(
+                    ALL_TABLES[
+                        (settings.parquet_s3_database, settings.parquet_s3_schema)
+                    ].keys()
+                )
 
             LOGGER.info("Tables: %s", ",".join(table_names))
 
