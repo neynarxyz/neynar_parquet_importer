@@ -28,6 +28,7 @@ from .db import (
     get_tables,
     import_parquet,
     init_db,
+    maximum_parquet_age,
 )
 from .s3 import (
     download_incremental,
@@ -112,6 +113,27 @@ def sync_parquet_to_db(
             table,
         )
 
+        incremental_filename = check_for_past_incremental_import(
+            db_engine,
+            parquet_import_tracking,
+            settings,
+            table,
+        )
+
+        if incremental_filename:
+            parsed_filename = parse_parquet_filename(incremental_filename)
+
+            if parsed_filename["end_timestamp"] <= maximum_parquet_age():
+                LOGGER.warning(
+                    "incremental is too old. starting over",
+                    extra={"table": table.name},
+                )
+                existing_full_result = None
+                full_filename = None
+                full_completed = False
+                last_import_filename = None
+                incremental_filename = None
+
         if existing_full_result is not None:
             (full_filename, full_completed) = existing_full_result
             LOGGER.debug(
@@ -129,6 +151,7 @@ def sync_parquet_to_db(
             full_filename = None
             full_completed = False
             last_import_filename = None
+            incremental_filename = None
 
         if full_completed:
             # if we have a completed full, we probably have incrementals
@@ -177,6 +200,15 @@ def sync_parquet_to_db(
                 else:
                     raise ValueError("incremental_filename is missing")
         else:
+            if full_filename is not None:
+                parsed_filename = parse_parquet_filename(full_filename)
+
+                if parsed_filename["end_timestamp"] <= maximum_parquet_age():
+                    LOGGER.warning(
+                        "full is too old. starting over", extra={"table": table.name}
+                    )
+                    full_filename = None
+
             # the full is not completed (or not even started). start there
             # TODO: spawn this so we can check for incrementals while this is downloading
             if full_filename is None:
@@ -226,17 +258,27 @@ def sync_parquet_to_db(
                         raise ShuttingDown("incremental_filename is None")
 
                     completed_filenames.append(incremental_filename)
+
+                    # LOGGER.debug(
+                    #     "queued completion",
+                    #     extra={"f": f, "n": len(completed_filenames)},
+                    # )
                 elif fs[0].cancelled():
                     LOGGER.debug("cancelled")
                     return
                 else:
-                    # logging.DEBUG(
-                    #     "waiting for future to complete",
-                    #     # extra={"f": fs[0]},
-                    # )
                     if time.time() >= next_start_timestamp:
                         # time to spawn the next file
+                        # LOGGER.debug(
+                        #     "future not complete in time",
+                        #     extra={"f": fs[0]},
+                        # )
                         break
+                    # else:
+                    #     LOGGER.debug(
+                    #         "waiting for future to complete",
+                    #         extra={"f": fs[0]},
+                    #     )
 
             mark_completed(db_engine, parquet_import_tracking, completed_filenames)
             completed_filenames.clear()
@@ -477,10 +519,6 @@ def main(settings: Settings):
             tables = get_tables(settings.postgres_schema, db_engine, table_names)
 
             # TODO: test the s3 client here?
-
-            target_dir = settings.target_dir()
-            if not target_dir.exists():
-                target_dir.mkdir(parents=True)
 
             # these pretty progress bars show when you run the application in an interactive terminal
             bytes_progress = Progress(

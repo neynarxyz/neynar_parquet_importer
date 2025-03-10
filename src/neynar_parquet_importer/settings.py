@@ -62,6 +62,12 @@ class Settings(BaseSettings):
         os.environ["TZ"] = "UTC"
         time.tzset()
 
+        incoming_dir = self.incoming_dir()
+        incoming_dir.mkdir(parents=True, exist_ok=True)
+
+        target_dir = self.target_dir()
+        target_dir.mkdir(parents=True, exist_ok=True)
+
         self.setup_datadog()
         self.setup_logging()
 
@@ -110,3 +116,6 @@ class Settings(BaseSettings):
             # don't include the schema. it's alredy in the filename
             # / self.parquet_s3_schema
         )
+
+    def incoming_dir(self):
+        return self.target_dir() / f".incoming.{self.target_name}"

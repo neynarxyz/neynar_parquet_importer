@@ -170,15 +170,6 @@ def check_for_past_incremental_import(
 
     latest_filename = result[0]
 
-    parsed_filename = parse_parquet_filename(latest_filename)
-
-    if parsed_filename["end_timestamp"] <= maximum_parquet_age():
-        LOGGER.warning(
-            "Skipping incremental file because it is too old",
-            extra={"file": latest_filename},
-        )
-        return None
-
     return latest_filename
 
 
@@ -209,16 +200,6 @@ def check_for_past_full_import(
 
     latest_filename = result[0]
     completed = result[1]
-
-    # # TODO: think about this more. we might need to check that our full is completed
-    # parsed_filename = parse_parquet_filename(latest_filename)
-    #
-    # if parsed_filename["end_timestamp"] <= maximum_parquet_age():
-    #     LOGGER.warning(
-    #         "Skipping full file because it is too old",
-    #         extra={"file": latest_filename},
-    #     )
-    #     return None
 
     return (latest_filename, completed)
 
@@ -530,8 +511,8 @@ def fetchone_with_retry(engine, stmt):
 
 
 def maximum_parquet_age():
-    """Only 2 weeks of files are kept in s3"""
-    return time() - 60 * 60 * 24 * 7 * 2
+    """Only 3 weeks of files are kept in s3"""
+    return time() - 60 * 60 * 24 * 7 * 3
 
 
 # NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.

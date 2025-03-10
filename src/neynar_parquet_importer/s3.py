@@ -83,9 +83,12 @@ def download_latest_full(
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
         return local_file_path
 
+    incoming_path = settings.incoming_dir() / full_name
+
     resumable_download(
         s3_client,
         latest_file["Key"],
+        incoming_path,
         local_file_path,
         progress_callback,
         latest_size_bytes,
@@ -117,7 +120,9 @@ def download_incremental(
     empty_name = f"{incremental_name}.empty"
 
     target_dir = settings.target_dir()
+    incoming_dir = settings.incoming_dir()
 
+    local_incoming_path = os.path.join(incoming_dir, parquet_name)
     local_parquet_path = os.path.join(target_dir, parquet_name)
     local_empty_path = os.path.join(target_dir, empty_name)
 
@@ -146,11 +151,11 @@ def download_incremental(
     contents = response.get("Contents", [])
 
     if not contents:
-        LOGGER.debug("No files found: %s", incremental_s3_prefix + prefix_name)
+        LOGGER.debug("No s3 files found: %s", incremental_s3_prefix + prefix_name)
         return None
 
     if len(contents) > 1:
-        raise ValueError("Multiple files found", contents)
+        raise ValueError("Multiple s3 files found", contents)
 
     head_object = contents[0]
 
@@ -164,6 +169,7 @@ def download_incremental(
     resumable_download(
         s3_client,
         head_object["Key"],
+        local_incoming_path,
         local_parquet_path,
         bytes_downloaded_progress,
         final_size_bytes,
@@ -204,6 +210,7 @@ def get_chunk_ranges(
 def resumable_download(
     s3_client,
     s3_key,
+    local_incoming_path,
     local_file_path,
     progress_callback,
     final_size_bytes,
@@ -214,13 +221,11 @@ def resumable_download(
 
     logging.debug("ranges: %s", ranges)
 
-    incoming_path = local_file_path + ".incoming"
-
     if len(ranges) == 1:
         _resumable_download_chunk(
             s3_client,
             s3_key,
-            incoming_path,
+            local_incoming_path,
             progress_callback,
             ranges[0][0],
             ranges[0][1],
@@ -232,7 +237,7 @@ def resumable_download(
                 _resumable_download_chunk,
                 s3_client,
                 s3_key,
-                local_file_path + f".incoming{i}",
+                str(local_incoming_path) + str(i),
                 progress_callback,
                 r[0],
                 r[1],
@@ -242,7 +247,7 @@ def resumable_download(
         ]
 
         # make sure local_file_path exists with the right size
-        with open(incoming_path, "wb") as wfd:
+        with open(local_incoming_path, "wb") as wfd:
             # we could do these as completed, but thats more complex
             for f in fs:
                 chunk_path = f.result()
@@ -252,10 +257,16 @@ def resumable_download(
                 with open(chunk_path, "rb") as rfd:
                     shutil.copyfileobj(rfd, wfd)
 
-    if os.path.getsize(incoming_path) != final_size_bytes:
-        raise ValueError("Downloaded file is not the expected size", incoming_path)
+        for f in fs:
+            chunk_path = f.result()
+            os.remove(chunk_path)
 
-    os.rename(incoming_path, local_file_path)
+    if os.path.getsize(local_incoming_path) != final_size_bytes:
+        raise ValueError(
+            "Downloaded file is not the expected size", local_incoming_path
+        )
+
+    os.rename(local_incoming_path, local_file_path)
 
     logging.debug("Finished downloading: %s", local_file_path)
 
