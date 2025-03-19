@@ -1,7 +1,7 @@
 import logging
 from pathlib import PosixPath
 from datetime import datetime, timedelta, UTC
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger import json as jsonlogger
 from rich.logging import RichHandler
 from pprint import pformat
 
