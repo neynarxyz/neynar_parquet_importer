@@ -48,7 +48,7 @@ NOTE: INTERACTIVE_DEBUG makes python open a shell if an exception happens. This 
 
 Lint your code:
 
-    ruff check neynar_parquet_importer
+    ruff check src
 
 Upgrade dependencies ([OfficialDocs](https://docs.astral.sh/uv/concepts/projects/sync/#upgrading-locked-package-versions)):
 
