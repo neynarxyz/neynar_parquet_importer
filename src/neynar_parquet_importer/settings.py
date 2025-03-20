@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     tables: str = ""
     views: str = ""
 
+    app_uuid: str | None = None
     datadog_enabled: bool = True
     download_workers: int = 16
     exit_after_max_wait: bool = False  # TODO: improve this more
@@ -72,14 +73,19 @@ class Settings(BaseSettings):
         self.setup_logging()
 
     def setup_datadog(self):
+        statsd_constant_tags = [
+            f"target:{self.target_name}",
+            f"npe_version:{self.npe_version}-{self.incremental_duration}",
+            f"parquet_db:{self.parquet_s3_database}",
+            f"parquet_schema:{self.parquet_s3_schema}",
+        ]
+
+        if self.app_uuid:
+            statsd_constant_tags.append(f"app_uuid:{self.app_uuid}")
+
         datadog.initialize(
             hostname_from_config=False,
-            statsd_constant_tags=[
-                f"target:{self.target_name}",
-                f"npe_version:{self.npe_version}-{self.incremental_duration}",
-                f"parquet_db:{self.parquet_s3_database}",
-                f"parquet_schema:{self.parquet_s3_schema}",
-            ],
+            statsd_constant_tags=statsd_constant_tags,
         )
 
     def setup_logging(self):
