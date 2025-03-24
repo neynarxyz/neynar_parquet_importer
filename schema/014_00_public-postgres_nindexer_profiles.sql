@@ -12,5 +12,33 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.profiles
     display_name text,
     "location" text,
     latitude real,
-    longitude real
+    longitude real,
+    primary_eth_address bytea,
+    primary_sol_address bytea
 );
+
+DO $$
+BEGIN
+    -- Add new columns to profiles if they don't already exist
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'profiles'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+        AND column_name = 'primary_eth_address'
+    ) THEN
+        ALTER TABLE ${POSTGRES_SCHEMA}.profiles
+        ADD COLUMN primary_eth_address bytea;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'profiles'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+        AND column_name = 'primary_sol_address'
+    ) THEN
+        ALTER TABLE ${POSTGRES_SCHEMA}.profiles
+        ADD COLUMN primary_sol_address bytea;
+    END IF;
+END $$;
