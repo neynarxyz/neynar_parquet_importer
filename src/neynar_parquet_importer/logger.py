@@ -95,10 +95,11 @@ def setup_logging(level: str, log_format: str):
         logHandler = CustomRichHandler(rich_tracebacks=True)
 
     logging.basicConfig(
-        format=format,
         datefmt="%X",
-        level=level,
+        force=True,
+        format=format,
         handlers=[logHandler],
+        level=level,
     )
 
     # # TODO: make this configurable
