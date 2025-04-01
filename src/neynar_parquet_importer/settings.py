@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "json"
     npe_version: str = "v2"
+    filter_file: Path | None = None
     parquet_s3_bucket: str = "tf-premium-parquet"
     parquet_s3_database: str = "public-postgres"
     parquet_s3_schema: str = "farcaster"
