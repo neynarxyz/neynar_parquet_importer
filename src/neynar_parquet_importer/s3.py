@@ -219,7 +219,8 @@ def resumable_download(
 ):
     ranges = get_chunk_ranges(final_size_bytes, max_chunks=8)
 
-    logging.debug("ranges: %s", ranges)
+    # TODO: this is too verbose
+    # logging.debug("ranges: %s", ranges)
 
     if len(ranges) == 1:
         _resumable_download_chunk(

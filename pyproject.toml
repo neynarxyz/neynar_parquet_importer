@@ -48,9 +48,6 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.pytest.ini_options]
-asyncio_default_fixture_loop_scope = "function"
-
 [tool.uv]
 dev-dependencies = [
     "pytest>=8.3.5",

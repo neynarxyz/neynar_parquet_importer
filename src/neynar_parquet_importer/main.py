@@ -1,3 +1,4 @@
+import orjson
 import logging
 import os
 import signal
@@ -94,6 +95,7 @@ def sync_parquet_to_db(
     table,
     parquet_import_tracking,
     progress_callbacks,
+    row_filters,
     settings: Settings,
 ):
     """Function that runs forever (barring exceptions) to download and import parquet files for a table.
@@ -189,6 +191,7 @@ def sync_parquet_to_db(
                         progress_callbacks["empty_steps"],
                         parquet_import_tracking,
                         row_group_executor,
+                        row_filters,
                         settings,
                     )
 
@@ -230,6 +233,7 @@ def sync_parquet_to_db(
                 progress_callbacks["empty_steps"],
                 parquet_import_tracking,
                 row_group_executor,
+                row_filters,
                 settings,
             )
 
@@ -308,6 +312,7 @@ def sync_parquet_to_db(
                 progress_callbacks,
                 parquet_import_tracking,
                 row_group_executor,
+                row_filters,
                 settings,
             )
             fs.append(f)
@@ -380,6 +385,7 @@ def download_and_import_incremental_parquet(
     progress_callbacks,
     parquet_import_tracking,
     row_group_executor,
+    row_filters,
     settings: Settings,
 ):
     # as long as at least one file on this table is progressing, we are okay and shouldn't exit/warn
@@ -453,6 +459,7 @@ def download_and_import_incremental_parquet(
             progress_callbacks["empty_steps"],
             parquet_import_tracking,
             row_group_executor,
+            row_filters,
             settings,
         )
 
@@ -643,6 +650,12 @@ def main(settings: Settings):
                     },
                 )
 
+            if settings.filter_file:
+                with settings.filter_file.open("r") as f:
+                    row_filters = orjson.loads(f.read())
+            else:
+                row_filters = {}
+
             futures = {
                 table_executor.submit(
                     sync_parquet_to_db,
@@ -653,6 +666,7 @@ def main(settings: Settings):
                     tables[table_name],
                     tables["parquet_import_tracking"],
                     progress_callbacks,
+                    row_filters.get(f"{settings.parquet_s3_schema}.{table_name}", None),
                     settings,
                 ): table_name
                 for table_name in table_names
