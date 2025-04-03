@@ -26,19 +26,20 @@ class Settings(BaseSettings):
     download_workers: int = 16
     exit_after_max_wait: bool = False  # TODO: improve this more
     file_workers: int = 4
+    filter_file: Path | None = None
     incremental_duration: int = Field(300, alias="npe_duration")
     interactive_debug: bool = False
     local_input_dir: Path = Path("./data/parquet")
-    log_level: str = "INFO"
     log_format: str = "json"
+    log_level: str = "INFO"
     npe_version: str = "v2"
     parquet_s3_bucket: str = "tf-premium-parquet"
     parquet_s3_database: str = "public-postgres"
     parquet_s3_schema: str = "farcaster"
     postgres_dsn: PostgresDsn = "postgresql+psycopg://postgres:postgres@localhost:15432/example_neynar_parquet_importer"
     postgres_max_overflow: int = 10
-    postgres_poolclass: str = "QueuePool"
     postgres_pool_size: int = 90
+    postgres_poolclass: str = "QueuePool"
     postgres_schema: str = "public"
     row_workers: int = 10
     s3_pool_size: int = 100

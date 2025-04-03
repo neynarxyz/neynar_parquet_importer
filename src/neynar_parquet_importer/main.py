@@ -1,3 +1,4 @@
+import orjson
 import logging
 import os
 import signal
@@ -94,6 +95,7 @@ def sync_parquet_to_db(
     table,
     parquet_import_tracking,
     progress_callbacks,
+    row_filters,
     settings: Settings,
 ):
     """Function that runs forever (barring exceptions) to download and import parquet files for a table.
@@ -113,6 +115,12 @@ def sync_parquet_to_db(
             table,
         )
 
+        if existing_full_result is not None:
+            (full_filename, full_completed) = existing_full_result
+        else:
+            full_filename = None
+            full_completed = False
+
         incremental_filename = check_for_past_incremental_import(
             db_engine,
             parquet_import_tracking,
@@ -123,7 +131,7 @@ def sync_parquet_to_db(
         if incremental_filename:
             parsed_filename = parse_parquet_filename(incremental_filename)
 
-            if parsed_filename["end_timestamp"] <= maximum_parquet_age():
+            if parsed_filename["end_timestamp"] <= maximum_parquet_age(full_filename):
                 LOGGER.warning(
                     "incremental is too old. starting over",
                     extra={"table": table.name},
@@ -135,7 +143,6 @@ def sync_parquet_to_db(
                 incremental_filename = None
 
         if existing_full_result is not None:
-            (full_filename, full_completed) = existing_full_result
             LOGGER.debug(
                 "full found",
                 extra={
@@ -189,6 +196,7 @@ def sync_parquet_to_db(
                         progress_callbacks["empty_steps"],
                         parquet_import_tracking,
                         row_group_executor,
+                        row_filters,
                         settings,
                     )
 
@@ -230,6 +238,7 @@ def sync_parquet_to_db(
                 progress_callbacks["empty_steps"],
                 parquet_import_tracking,
                 row_group_executor,
+                row_filters,
                 settings,
             )
 
@@ -308,6 +317,7 @@ def sync_parquet_to_db(
                 progress_callbacks,
                 parquet_import_tracking,
                 row_group_executor,
+                row_filters,
                 settings,
             )
             fs.append(f)
@@ -380,6 +390,7 @@ def download_and_import_incremental_parquet(
     progress_callbacks,
     parquet_import_tracking,
     row_group_executor,
+    row_filters,
     settings: Settings,
 ):
     # as long as at least one file on this table is progressing, we are okay and shouldn't exit/warn
@@ -453,6 +464,7 @@ def download_and_import_incremental_parquet(
             progress_callbacks["empty_steps"],
             parquet_import_tracking,
             row_group_executor,
+            row_filters,
             settings,
         )
 
@@ -643,6 +655,12 @@ def main(settings: Settings):
                     },
                 )
 
+            if settings.filter_file:
+                with settings.filter_file.open("r") as f:
+                    row_filters = orjson.loads(f.read())
+            else:
+                row_filters = {}
+
             futures = {
                 table_executor.submit(
                     sync_parquet_to_db,
@@ -653,6 +671,7 @@ def main(settings: Settings):
                     tables[table_name],
                     tables["parquet_import_tracking"],
                     progress_callbacks,
+                    row_filters.get(f"{settings.parquet_s3_schema}.{table_name}", None),
                     settings,
                 ): table_name
                 for table_name in table_names

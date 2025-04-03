@@ -90,9 +90,11 @@ def setup_logging(level: str, log_format: str):
 
         logHandler = logging.StreamHandler()
         logHandler.setFormatter(formatter)
-    else:
+    elif log_format == "rich":
         format = "%(name)s - %(message)s"
         logHandler = CustomRichHandler(rich_tracebacks=True)
+    else:
+        raise ValueError(f"Invalid log format: {log_format}")
 
     logging.basicConfig(
         datefmt="%X",

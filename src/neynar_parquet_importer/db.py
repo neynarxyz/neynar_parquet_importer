@@ -18,6 +18,8 @@ from tenacity import (
     wait_random_exponential,
 )
 
+from neynar_parquet_importer.row_filters import include_row
+
 from .logger import LOGGER
 from .s3 import parse_parquet_filename
 from .settings import SHUTDOWN_EVENT, Settings
@@ -36,7 +38,7 @@ JSON_COLUMNS = [
 
 def init_db(uri, parquet_tables, settings: Settings):
     """Initialize the database with our simple schema."""
-    statement_timeout = 1000 * 15  # 15 seconds
+    # TODO: option to set `statement_timeout = 1000 * 30`  # 30 seconds
 
     if settings.postgres_poolclass == "NullPool":
         engine = create_engine(
@@ -251,6 +253,7 @@ def import_parquet(
     empty_callback,
     parquet_import_tracking: Table,
     row_group_executor,
+    row_filters,
     settings: Settings,
 ):
     parsed_filename = parse_parquet_filename(local_filename)
@@ -366,14 +369,15 @@ def import_parquet(
 
         f = row_group_executor.submit(
             process_batch,
-            parquet_file,
-            i,
-            engine,
-            primary_key_columns,
-            table,
-            progress_callback,
-            parsed_filename,
             dd_tags,
+            engine,
+            i,
+            parquet_file,
+            parsed_filename,
+            primary_key_columns,
+            progress_callback,
+            row_filters,
+            table,
         )
 
         fs.append(f)
@@ -399,6 +403,7 @@ def import_parquet(
                 if SHUTDOWN_EVENT.is_set():
                     return
                 try:
+                    # TODO: rewrite this to select between the event and the result
                     (i, file_age_s, row_age_s, last_updated_at) = f.result(timeout=3)
                 except TimeoutError:
                     continue
@@ -424,6 +429,7 @@ def import_parquet(
         )
 
         # TODO: metric here?
+        # TODO: this is rather verbose. maybe we should only log some?
         if num_row_groups > 1:
             LOGGER.info(
                 "Completed upsert #%s/%s for %s",
@@ -510,22 +516,27 @@ def fetchone_with_retry(engine, stmt):
         return row
 
 
-def maximum_parquet_age():
+def maximum_parquet_age(full_filename: None | str):
     """Only 3 weeks of files are kept in s3"""
+    if full_filename:
+        parsed_filename = parse_parquet_filename(full_filename)
+        return parsed_filename["end_timestamp"]
+
     return time() - 60 * 60 * 24 * 7 * 3
 
 
 # NOTE: You can modify the data however you want here. Do things like pull values out of json columns or skip columns entirely.
 # TODO: have a helper function here that makes it easier to clean up the data
 def process_batch(
-    parquet_file,
-    i,
-    engine,
-    primary_key_columns,
-    table,
-    progress_callback,
-    parsed_filename,
     dd_tags,
+    engine,
+    i,
+    parquet_file,
+    parsed_filename,
+    primary_key_columns,
+    progress_callback,
+    row_filters,
+    table,
 ):
     # LOGGER.debug("starting batch #%s", i)
 
@@ -533,6 +544,7 @@ def process_batch(
 
     # TODO: detect tables that need deduping automatically. i think its any that have multiple primary key col
     if table.name in ["profile_with_addresses"]:
+        # TODO: check that we are in the right schema too. this is only needed for farcaster.profile_with_addresses
         # this view needs de-duping
         data = batch.to_pydict()
 
@@ -555,38 +567,70 @@ def process_batch(
         # Direct conversion to Python-native types for sqlalchemy
         rows = batch.to_pylist()
 
-    row_keys = rows[0].keys()
+    if row_filters:
+        orig_rows_len = len(rows)
 
-    # TODO: i don't love this
-    # TODO: we used to have code here that would remove duplicate ids, but I don't think that's necessary anymore
-    for row in rows:
-        for col_name in row_keys:
-            row[col_name] = clean_parquet_data(col_name, row[col_name])
+        # TODO: check versions of the filters. we might want to support graphql or other formats in the near future
+        rows = list(filter(lambda row: include_row(row, row_filters), rows))
 
-    # TODO: use Abstract Base Classes to make this easy to extend
+        rows_len = len(rows)
 
-    # insert or update the rows
-    stmt = pg_insert(table).values(rows)
+        filtered_rows = orig_rows_len - rows_len
 
-    # only upsert where updated_at is newer than the existing row
-    # TODO: for some tables (like links, we need to pass a constraint here!)
-    upsert_stmt = stmt.on_conflict_do_update(
-        index_elements=primary_key_columns,
-        set_={col: stmt.excluded[col] for col in row_keys},
-        where=(stmt.excluded["updated_at"] > table.c.updated_at),
-    )
+        if filtered_rows:
+            LOGGER.debug(
+                "filtered",
+                extra={
+                    "num_filtered": filtered_rows,
+                    "rows": rows_len,
+                    "table": table.name,
+                },
+            )
+            statsd.increment(
+                "num_parquet_rows_filtered",
+                value=filtered_rows,
+                tags=dd_tags,
+            )
+    else:
+        rows_len = len(rows)
+        filtered_rows = 0
 
-    execute_with_retry(engine, upsert_stmt)
+    if rows:
+        row_keys = rows[0].keys()
+
+        # TODO: i don't love this
+        for row in rows:
+            for col_name in row_keys:
+                row[col_name] = clean_parquet_data(col_name, row[col_name])
+
+        # TODO: use Abstract Base Classes to make this easy to extend/transform
+
+        # insert or update the rows
+        stmt = pg_insert(table).values(rows)
+
+        # only upsert where updated_at is newer than the existing row
+        # TODO: for some tables (like links, we need to pass a constraint here!)
+        upsert_stmt = stmt.on_conflict_do_update(
+            index_elements=primary_key_columns,
+            set_={col: stmt.excluded[col] for col in row_keys},
+            where=(stmt.excluded["updated_at"] > table.c.updated_at),
+        )
+
+        execute_with_retry(engine, upsert_stmt)
 
     now = time()
 
     file_age_s = now - parsed_filename["end_timestamp"]
 
-    last_updated_at = rows[-1]["updated_at"]
+    if rows:
+        last_updated_at = rows[-1]["updated_at"]
+    else:
+        last_updated_at = datetime.fromtimestamp(parsed_filename["end_timestamp"], UTC)
 
     row_age_s = now - last_updated_at.timestamp()
 
     if file_age_s > row_age_s:
+        # this happened in the past when timezones were not handled correctly
         LOGGER.warning(
             "bad row age!",
             extra={
@@ -601,7 +645,7 @@ def process_batch(
     statsd.gauge("parquet_row_age_s", row_age_s, tags=dd_tags)
     statsd.increment(
         "num_parquet_rows_imported",
-        value=len(rows),
+        value=rows_len,
         tags=dd_tags,
     )
 
