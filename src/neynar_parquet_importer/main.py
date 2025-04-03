@@ -343,7 +343,7 @@ def sync_parquet_to_db(
     finally:
         # don't lose any progress
         if completed_filenames:
-            logging.info(
+            LOGGER.info(
                 "final mark_completed",
                 extra={
                     "table": table.name,

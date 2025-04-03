@@ -220,7 +220,7 @@ def resumable_download(
     ranges = get_chunk_ranges(final_size_bytes, max_chunks=8)
 
     # TODO: this is too verbose
-    # logging.debug("ranges: %s", ranges)
+    # LOGGER.debug("ranges: %s", ranges)
 
     if len(ranges) == 1:
         _resumable_download_chunk(
@@ -253,7 +253,7 @@ def resumable_download(
             for f in fs:
                 chunk_path = f.result()
 
-                logging.debug("Merging chunk: %s", chunk_path)
+                LOGGER.debug("Merging chunk: %s", chunk_path)
 
                 with open(chunk_path, "rb") as rfd:
                     shutil.copyfileobj(rfd, wfd)
@@ -269,7 +269,7 @@ def resumable_download(
 
     os.rename(local_incoming_path, local_file_path)
 
-    logging.debug("Finished downloading: %s", local_file_path)
+    LOGGER.debug("Finished downloading: %s", local_file_path)
 
 
 def _resumable_download_chunk(
@@ -335,7 +335,7 @@ def _resumable_download_chunk(
     if os.path.getsize(chunk_path) != final_size:
         raise ValueError("Downloaded file is not the expected size", chunk_path)
 
-    LOGGER.info("Finished downloading: %s", chunk_path)
+    LOGGER.debug("Finished downloading: %s", chunk_path)
 
     return chunk_path
 
