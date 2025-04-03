@@ -115,6 +115,12 @@ def sync_parquet_to_db(
             table,
         )
 
+        if existing_full_result is not None:
+            (full_filename, full_completed) = existing_full_result
+        else:
+            full_filename = None
+            full_completed = False
+
         incremental_filename = check_for_past_incremental_import(
             db_engine,
             parquet_import_tracking,
@@ -125,7 +131,7 @@ def sync_parquet_to_db(
         if incremental_filename:
             parsed_filename = parse_parquet_filename(incremental_filename)
 
-            if parsed_filename["end_timestamp"] <= maximum_parquet_age():
+            if parsed_filename["end_timestamp"] <= maximum_parquet_age(full_filename):
                 LOGGER.warning(
                     "incremental is too old. starting over",
                     extra={"table": table.name},
@@ -137,7 +143,6 @@ def sync_parquet_to_db(
                 incremental_filename = None
 
         if existing_full_result is not None:
-            (full_filename, full_completed) = existing_full_result
             LOGGER.debug(
                 "full found",
                 extra={

@@ -516,8 +516,12 @@ def fetchone_with_retry(engine, stmt):
         return row
 
 
-def maximum_parquet_age():
+def maximum_parquet_age(full_filename: None | str):
     """Only 3 weeks of files are kept in s3"""
+    if full_filename:
+        parsed_filename = parse_parquet_filename(full_filename)
+        return parsed_filename["end_timestamp"]
+
     return time() - 60 * 60 * 24 * 7 * 3
 
 
