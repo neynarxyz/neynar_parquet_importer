@@ -22,4 +22,28 @@ BEGIN
         -- Drop the constraint
         ALTER TABLE follow_counts DROP CONSTRAINT follow_counts_fid_key;
     END IF;
+
+    -- Add filtered_following_count to follow_counts if it doesn't already exist
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'follow_counts'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+        AND column_name = 'filtered_following_count'
+    ) THEN
+        ALTER TABLE ${POSTGRES_SCHEMA}.follow_counts
+        ADD COLUMN filtered_following_count bigint NULL;
+    END IF;
+
+    -- Add filtered_follower_count to follow_counts if it doesn't already exist
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'follow_counts'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+        AND column_name = 'filtered_follower_count'
+    ) THEN
+        ALTER TABLE ${POSTGRES_SCHEMA}.follow_counts
+        ADD COLUMN filtered_follower_count bigint NULL;
+    END IF;
 END $$;
