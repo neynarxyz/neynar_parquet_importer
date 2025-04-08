@@ -103,6 +103,7 @@ def setup_logging(level: str, log_format: str):
         handlers=[logHandler],
         level=level,
     )
+    logging.captureWarnings(True)
 
     # # TODO: make this configurable
     # logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
