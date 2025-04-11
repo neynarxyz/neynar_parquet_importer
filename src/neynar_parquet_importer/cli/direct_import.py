@@ -8,8 +8,6 @@ import dotenv
 from rich.progress import (
     Progress,
     MofNCompleteColumn,
-    DownloadColumn,
-    TransferSpeedColumn,
 )
 from ipdb import launch_ipdb_on_exception
 

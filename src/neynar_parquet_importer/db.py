@@ -1,5 +1,4 @@
 import atexit
-from concurrent.futures import CancelledError
 from datetime import UTC, datetime
 import logging
 from pathlib import Path

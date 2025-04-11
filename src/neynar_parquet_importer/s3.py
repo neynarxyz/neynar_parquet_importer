@@ -1,6 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
 from functools import cache
-import logging
 import math
 import os
 from pathlib import Path
