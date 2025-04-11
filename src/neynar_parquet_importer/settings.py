@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     incremental_duration: int = Field(300, alias="npe_duration")
     interactive_debug: bool = False
     local_input_dir: Path = Path("./data/parquet")
+    local_input_only: bool = False  # useful for development
     log_format: str = "json"
     log_level: str = "INFO"
     npe_version: str = "v2"

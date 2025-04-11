@@ -55,7 +55,10 @@ def format_field(v):
         return v.isoformat()
 
     if isinstance(v, PosixPath):
-        return v.relative_to(v.cwd())
+        try:
+            return v.relative_to(v.cwd())
+        except ValueError:
+            return v
 
     return v
 
@@ -103,6 +106,9 @@ def setup_logging(level: str, log_format: str):
         handlers=[logHandler],
         level=level,
     )
+
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+
     logging.captureWarnings(True)
 
     # # TODO: make this configurable

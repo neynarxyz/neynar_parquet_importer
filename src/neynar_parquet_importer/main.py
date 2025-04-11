@@ -68,6 +68,8 @@ ALL_TABLES = {
     },
     # for these, set `npe_version=v3` `parquet_s3_schema=nindexer` `incremental_duration=1`
     ("public-postgres", "nindexer"): {
+        "casts": {},
+        "reactions": {},
         # "follow_counts": {},  # NOTE: this table costs extra. Talk to us if you need it
         "follows": {},
         # "neynar_user_scores": {},  # NOTE: this table costs extra. Talk to us if you need it
@@ -97,6 +99,7 @@ def sync_parquet_to_db(
     progress_callbacks,
     row_filters,
     settings: Settings,
+    f_shutdown,
 ):
     """Function that runs forever (barring exceptions) to download and import parquet files for a table.
 
@@ -629,6 +632,14 @@ def main(settings: Settings):
                 )
                 for table_name in table_names
             }
+            shutdown_executor = stack.enter_context(
+                ThreadPoolExecutor(
+                    max_workers=1,
+                    thread_name_prefix="Shutdown",
+                )
+            )
+
+            f_shutdown = shutdown_executor.submit(SHUTDOWN_EVENT.wait)
 
             pool_size_needed = settings.row_workers * len(
                 row_group_executors
@@ -673,6 +684,7 @@ def main(settings: Settings):
                     progress_callbacks,
                     row_filters.get(f"{settings.parquet_s3_schema}.{table_name}", None),
                     settings,
+                    f_shutdown,
                 ): table_name
                 for table_name in table_names
             }

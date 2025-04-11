@@ -2,6 +2,8 @@ import atexit
 from concurrent.futures import CancelledError
 from datetime import UTC, datetime
 import logging
+from pathlib import Path
+import concurrent
 from datadog import statsd
 import glob
 import orjson
@@ -120,10 +122,12 @@ def init_db(uri, parquet_tables, settings: Settings):
 
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         for i, migration in enumerate(migrations):
-            LOGGER.info("applying migration", extra={"i": i})
-            LOGGER.debug(
-                "applying migration", extra={"i": i, "migration": str(migration)}
-            )
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.debug(
+                    "applying migration", extra={"i": i, "migration": str(migration)}
+                )
+            else:
+                LOGGER.info("applying migration", extra={"i": i})
             conn.execute(migration)
 
     LOGGER.info("migrations complete.")
@@ -136,7 +140,7 @@ def check_for_past_incremental_import(
     parquet_import_tracking: Table,
     settings: Settings,
     table: Table,
-):
+) -> Path:
     """
     Returns the filename for the newest completed incremental.
     There may be some partially imported files after this.
@@ -172,7 +176,7 @@ def check_for_past_incremental_import(
 
     latest_filename = result[0]
 
-    return latest_filename
+    return Path(latest_filename)
 
 
 def check_for_past_full_import(
@@ -200,14 +204,16 @@ def check_for_past_full_import(
     if result is None:
         return None
 
-    latest_filename = result[0]
-    completed = result[1]
+    latest_filename = Path(result[0])
+    completed: bool = result[1]
 
     return (latest_filename, completed)
 
 
 def clean_parquet_data(col_name, value):
-    if col_name in JSON_COLUMNS:
+    # old v2 tables have json columns stored as strings
+    # v3 tables store them as json and don't need this check
+    if col_name in JSON_COLUMNS and isinstance(value, str):
         return orjson.loads(value)
     # TODO: if this is a datetime column, it is from parquet in milliseconds, not seconds!
     return value
@@ -247,7 +253,7 @@ def get_tables(
 def import_parquet(
     engine,
     table: Table,
-    local_filename,
+    local_file: Path,
     file_type,
     progress_callback,
     empty_callback,
@@ -255,8 +261,9 @@ def import_parquet(
     row_group_executor,
     row_filters,
     settings: Settings,
+    f_shutdown: concurrent.futures.Future,
 ):
-    parsed_filename = parse_parquet_filename(local_filename)
+    parsed_filename = parse_parquet_filename(local_file)
 
     assert table.name == parsed_filename["table_name"]
     schema_name = parsed_filename["schema_name"]
@@ -265,16 +272,16 @@ def import_parquet(
         f"parquet_table:{schema_name}.{table.name}",
     ]
 
-    is_empty = local_filename.endswith(".empty")
+    is_empty = local_file.suffix == ".empty"
 
     if is_empty:
         num_row_groups = 0
         # TODO: maybe have an option to return here instead of saving the ".empty" into the database
     else:
         try:
-            parquet_file = pq.ParquetFile(local_filename)
+            parquet_file = pq.ParquetFile(local_file)
         except Exception as e:
-            raise ValueError("Failed to read parquet file", local_filename, e)
+            raise ValueError("Failed to read parquet file", local_file, e)
 
         num_row_groups = parquet_file.num_row_groups
 
@@ -287,7 +294,7 @@ def import_parquet(
     # Prepare the insert statement
     stmt = pg_insert(parquet_import_tracking).values(
         table_name=table.name,
-        file_name=local_filename,
+        file_name=str(local_file),
         file_type=file_type,
         file_version=settings.npe_version,
         file_duration_s=settings.incremental_duration,
@@ -337,11 +344,18 @@ def import_parquet(
     new_steps = num_row_groups - start_row_group
 
     if new_steps == 0:
-        LOGGER.info("%s has already been imported", local_filename)
+        LOGGER.info("%s has already been imported", local_file)
         return
 
     if last_row_group_imported is not None:
-        LOGGER.info("%s has resumed importing", local_filename)
+        LOGGER.info(
+            "%s has resumed importing",
+            local_file,
+            extra={
+                "start_row_group": start_row_group,
+                "new_steps": new_steps,
+            },
+        )
 
     # LOGGER.debug(
     #     "%s more steps from %s",
@@ -359,6 +373,8 @@ def import_parquet(
     fs = []
     for i in range(start_row_group, num_row_groups):
         # TODO: larger batches with `pf.iter_batches(batch_size=X)` instead of row groups
+
+        # TODO: debugging option to only import a few row groups
 
         # LOGGER.debug(
         #     "Queueing upsert #%s/%s for %s",
@@ -386,6 +402,8 @@ def import_parquet(
 
     # LOGGER.debug("waiting for %s futures", len(fs))
 
+    log_every_n = max(10, (num_row_groups // 100) or (num_row_groups // 10))
+
     # update our database entry's last_row_group_imported
     # read them in order rather than with as_completed
     # TODO: have all the tables do this in another thread?
@@ -394,43 +412,44 @@ def import_parquet(
     )
     i = file_age_s = row_age_s = None
     while fs:
-        if SHUTDOWN_EVENT.is_set():
+        f = fs.pop(0)
+
+        done, not_done = concurrent.futures.wait(
+            [f, f_shutdown], return_when=concurrent.futures.FIRST_COMPLETED
+        )
+
+        if f_shutdown in done:
             return
 
-        f = fs.pop(0)
-        try:
-            while True:
-                if SHUTDOWN_EVENT.is_set():
-                    return
-                try:
-                    # TODO: rewrite this to select between the event and the result
-                    (i, file_age_s, row_age_s, last_updated_at) = f.result(timeout=3)
-                except TimeoutError:
-                    continue
+        assert f in done
+
+        # no need to call update for every entry if a bunch are done. skip to the last finished one
+        if fs:
+            while fs:
+                if fs[0].done():
+                    f = fs.pop(0)
                 else:
                     break
 
-            # no need to call update for every entry if a bunch are done. skip to the last finished one
-            if fs:
-                while fs:
-                    if fs[0].done():
-                        f = fs.pop(0)
-                    else:
-                        break
+        # no need for a timeout here because it is marked done
+        (i, file_age_s, row_age_s, last_updated_at) = f.result()
 
-                # no need for a timeout here because it is marked done
-                (i, file_age_s, row_age_s, last_updated_at) = f.result()
-        except CancelledError:
-            LOGGER.debug("cancelled inside import_parquet")
-            return
+        # logging.debug(
+        #     "completed",
+        #     extra={
+        #         "i": i,
+        #         "file_age_s": file_age_s,
+        #         "row_age_s": row_age_s,
+        #         "last_updated_at": last_updated_at.timestamp(),
+        #     },
+        # )
 
         execute_with_retry(
             engine, update_tracking_stmt.values(last_row_group_imported=i)
         )
 
         # TODO: metric here?
-        # TODO: this is rather verbose. maybe we should only log some?
-        if num_row_groups > 1:
+        if num_row_groups > 1 and i < num_row_groups - 1 and i % log_every_n == 0:
             LOGGER.info(
                 "Completed upsert #%s/%s for %s",
                 f"{i + 1:_}",
@@ -443,7 +462,7 @@ def import_parquet(
                 },
             )
 
-    file_size = path.getsize(local_filename)
+    file_size = path.getsize(local_file)
 
     # TODO: i'd like to emit this metric in the process_batch function, but I'm not sure how to get the size of the batch
     statsd.increment(
@@ -460,7 +479,7 @@ def import_parquet(
                 "file_age_s": file_age_s,
                 "row_age_s": row_age_s,
                 "table": table.name,
-                "file_name": local_filename,
+                "file_name": str(local_file),
                 "num_row_groups": num_row_groups,
                 "num_rows": parquet_file.metadata.num_rows,
                 "file_size": file_size,
@@ -473,7 +492,7 @@ def import_parquet(
                 "file_age_s": file_age_s,
                 "row_age_s": row_age_s,
                 "table": table.name,
-                "file_name": local_filename,
+                "file_name": str(local_file),
                 "i": i,
                 "num_row_groups": num_row_groups,
                 "num_rows": parquet_file.metadata.num_rows,
@@ -484,6 +503,7 @@ def import_parquet(
 
 def sleep_or_raise_shutdown(t):
     if SHUTDOWN_EVENT.wait(t):
+        # TODO: raise cancelled error instead
         raise RuntimeError("shutting down instead of sleeping")
 
 
@@ -493,6 +513,7 @@ def sleep_or_raise_shutdown(t):
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
+    reraise=True,
 )
 def execute_with_retry(engine, stmt):
     with engine.connect() as conn:
@@ -507,6 +528,7 @@ def execute_with_retry(engine, stmt):
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
+    reraise=True,
 )
 def fetchone_with_retry(engine, stmt):
     with engine.connect() as conn:
@@ -538,8 +560,11 @@ def process_batch(
     row_filters,
     table,
 ):
+    # This is too verbose
     # LOGGER.debug("starting batch #%s", i)
 
+    # TODO: is a row group really the right size here?
+    # TODO: postgres has a maximum item count of 65535! need to make sure split up the sql if its too big
     batch = parquet_file.read_row_group(i)
 
     # TODO: detect tables that need deduping automatically. i think its any that have multiple primary key col
@@ -565,6 +590,7 @@ def process_batch(
         #     )
     else:
         # Direct conversion to Python-native types for sqlalchemy
+        # TODO: this is probably making this way slower than necessary. im sure there are libraries to do this faster. df -> postgres
         rows = batch.to_pylist()
 
     if row_filters:
@@ -598,7 +624,7 @@ def process_batch(
     if rows:
         row_keys = rows[0].keys()
 
-        # TODO: i don't love this
+        # TODO: i don't love this. parquet apply things will be much faster. but we already turned it into a python object. will require a larger refactor
         for row in rows:
             for col_name in row_keys:
                 row[col_name] = clean_parquet_data(col_name, row[col_name])
@@ -610,6 +636,7 @@ def process_batch(
 
         # only upsert where updated_at is newer than the existing row
         # TODO: for some tables (like links, we need to pass a constraint here!)
+        # TODO: support tables that don't have an updated_at? so far everything must
         upsert_stmt = stmt.on_conflict_do_update(
             index_elements=primary_key_columns,
             set_={col: stmt.excluded[col] for col in row_keys},

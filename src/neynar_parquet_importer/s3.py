@@ -3,6 +3,7 @@ from functools import cache
 import logging
 import math
 import os
+from pathlib import Path
 import re
 import shutil
 import boto3
@@ -15,7 +16,8 @@ from .logger import LOGGER
 from .settings import Settings
 
 
-def parse_parquet_filename(filename):
+# TODO: stricter type on this. use named groups and just return those
+def parse_parquet_filename(filename: str | Path) -> dict[str, int]:
     basename = os.path.basename(filename)
 
     match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", basename)
@@ -25,6 +27,7 @@ def parse_parquet_filename(filename):
             "table_name": match.group(2),
             "start_timestamp": int(match.group(3)),
             "end_timestamp": int(match.group(4)),
+            # TODO: include if its parquet or empty
         }
     else:
         raise ValueError("Parquet filename does not match expected format.", filename)
@@ -137,6 +140,10 @@ def download_incremental(
     if os.path.exists(local_empty_path):
         LOGGER.debug("%s already exists locally. Skipping download", local_empty_path)
         return local_empty_path
+
+    if settings.local_input_only:
+        LOGGER.debug("No local files found: %s", local_parquet_path)
+        return None
 
     incremental_s3_prefix = settings.parquet_s3_prefix() + "incremental/"
 
