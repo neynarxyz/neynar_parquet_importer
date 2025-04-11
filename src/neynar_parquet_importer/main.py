@@ -201,6 +201,7 @@ def sync_parquet_to_db(
                         row_group_executor,
                         row_filters,
                         settings,
+                        f_shutdown,
                     )
 
                     last_import_filename = incremental_filename
@@ -243,6 +244,7 @@ def sync_parquet_to_db(
                 row_group_executor,
                 row_filters,
                 settings,
+                f_shutdown,
             )
 
             mark_completed(db_engine, parquet_import_tracking, [full_filename])
@@ -322,6 +324,7 @@ def sync_parquet_to_db(
                 row_group_executor,
                 row_filters,
                 settings,
+                f_shutdown,
             )
             fs.append(f)
 
@@ -395,6 +398,7 @@ def download_and_import_incremental_parquet(
     row_group_executor,
     row_filters,
     settings: Settings,
+    f_shutdown,
 ):
     # as long as at least one file on this table is progressing, we are okay and shouldn't exit/warn
     # TODO: use a shared watchdog for this table instead of having every import track its own age.
@@ -469,6 +473,7 @@ def download_and_import_incremental_parquet(
             row_group_executor,
             row_filters,
             settings,
+            f_shutdown,
         )
 
         # we got a file. reset max wait
