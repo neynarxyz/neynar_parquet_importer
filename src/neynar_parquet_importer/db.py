@@ -262,6 +262,9 @@ def import_parquet(
     settings: Settings,
     f_shutdown: concurrent.futures.Future,
 ):
+    if isinstance(local_file, str):
+        local_file = Path(local_file)
+
     parsed_filename = parse_parquet_filename(local_file)
 
     assert table.name == parsed_filename["table_name"]
