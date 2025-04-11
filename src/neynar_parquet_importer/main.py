@@ -368,6 +368,8 @@ def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
     if not completed_filenames:
         return
 
+    completed_filenames = [str(c) for c in completed_filenames]
+
     stmt = (
         update(parquet_import_tracking)
         .where(parquet_import_tracking.c.file_name.in_(completed_filenames))
