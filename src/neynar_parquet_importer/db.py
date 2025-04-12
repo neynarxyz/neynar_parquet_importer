@@ -1,3 +1,4 @@
+import ast
 import atexit
 from datetime import UTC, datetime
 import logging
@@ -213,7 +214,13 @@ def clean_v2_parquet_data(col_name, value):
     # old v2 tables have json columns stored as strings
     # v3 tables store them as json and don't need this check
     if col_name in JSON_COLUMNS and isinstance(value, (bytes, str)):
-        return orjson.loads(value)
+        try:
+            return orjson.loads(value)
+        except Exception:
+            LOGGER.warning(
+                "failed to parse json", extra={"col_name": col_name, "value": value}
+            )
+            return ast.literal_eval(value)
     # TODO: if this is a datetime column, it is from parquet in milliseconds, not seconds!
     return value
 
@@ -631,9 +638,16 @@ def process_batch(
         # TODO: i don't love this. parquet apply things will be much faster. but we already turned it into a python object. will require a larger refactor
         if npe_version == "v2":
             # TODO: loop col_names first and only call clean on ones that need changes
-            for row in rows:
-                for col_name in row_keys:
-                    row[col_name] = clean_v2_parquet_data(col_name, row[col_name])
+            try:
+                for row in rows:
+                    for col_name in row_keys:
+                        row[col_name] = clean_v2_parquet_data(col_name, row[col_name])
+            except Exception as e:
+                logging.exception(
+                    "failed to clean parquet data",
+                    extra={"col_name": col_name, "row": row, "x": row[col_name]},
+                )
+                raise ValueError(e)
 
         # TODO: use Abstract Base Classes to make this easy to extend/transform
 
