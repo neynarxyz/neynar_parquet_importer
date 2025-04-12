@@ -209,10 +209,10 @@ def check_for_past_full_import(
     return (latest_filename, completed)
 
 
-def clean_parquet_data(col_name, value):
+def clean_v2_parquet_data(col_name, value):
     # old v2 tables have json columns stored as strings
     # v3 tables store them as json and don't need this check
-    if col_name in JSON_COLUMNS and isinstance(value, str):
+    if col_name in JSON_COLUMNS and isinstance(value, (bytes, str)):
         return orjson.loads(value)
     # TODO: if this is a datetime column, it is from parquet in milliseconds, not seconds!
     return value
@@ -390,6 +390,7 @@ def import_parquet(
             dd_tags,
             engine,
             i,
+            settings.npe_version,
             parquet_file,
             parsed_filename,
             primary_key_columns,
@@ -555,6 +556,7 @@ def process_batch(
     dd_tags,
     engine,
     i,
+    npe_version,
     parquet_file,
     parsed_filename,
     primary_key_columns,
@@ -627,9 +629,11 @@ def process_batch(
         row_keys = rows[0].keys()
 
         # TODO: i don't love this. parquet apply things will be much faster. but we already turned it into a python object. will require a larger refactor
-        for row in rows:
-            for col_name in row_keys:
-                row[col_name] = clean_parquet_data(col_name, row[col_name])
+        if npe_version == "v2":
+            # TODO: loop col_names first and only call clean on ones that need changes
+            for row in rows:
+                for col_name in row_keys:
+                    row[col_name] = clean_v2_parquet_data(col_name, row[col_name])
 
         # TODO: use Abstract Base Classes to make this easy to extend/transform
 
