@@ -231,7 +231,7 @@ def get_tables(
     included_tables,
 ):
     """
-    Fetches the tables and views using SQLAlchemy.
+    Fetches the tables (but not views) using SQLAlchemy.
 
     :param engine: SQLAlchemy engine connected to the database.
     :return: List of Table objects.

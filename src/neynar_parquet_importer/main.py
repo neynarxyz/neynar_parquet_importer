@@ -78,14 +78,14 @@ ALL_TABLES = {
     },
 }
 
+# configuration for views and their required tables
 ALL_VIEWS = {
     # for these, set `npe_version=v2` `parquet_s3_schema=farcaster` `incremental_duration=300`
     ("public-postgres", "farcaster"): [],
     # for these, set `npe_version=v3` `parquet_s3_schema=nindexer` `incremental_duration=1`
-    ("public-postgres", "nindexer"): [
-        # this view require nindexer's "profiles" and "verifications" tables
-        "profiles_with_verifications",
-    ],
+    ("public-postgres", "nindexer"): {
+        "profiles_with_verifications": ["profiles", "verifications"],
+    },
 }
 
 
