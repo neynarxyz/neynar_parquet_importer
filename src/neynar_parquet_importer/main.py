@@ -317,7 +317,11 @@ def sync_parquet_to_db(
             mark_completed(db_engine, parquet_import_tracking, completed_filenames)
             completed_filenames.clear()
 
-            sleep_amount = max(0, next_start_timestamp - time.time())
+            # sleep until the next file is ready. plus a 1 second buffer
+            sleep_amount = max(
+                0,
+                next_start_timestamp + settings.incremental_duration + 1 - time.time(),
+            )
 
             if fs:
                 # sleep a maximum of one second since we should loop to see if tasks are done
@@ -720,7 +724,7 @@ def main(settings: Settings):
             else:
                 row_filters = {}
 
-            LOGGER.debug("all row_filters: %s", row_filters)
+            # LOGGER.debug("all row_filters: %s", row_filters)
 
             futures = {
                 table_executor.submit(
