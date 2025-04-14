@@ -105,6 +105,14 @@ def sync_parquet_to_db(
 
     TODO: run downloads and imports in parallel to improve initial sync times
     """
+    LOGGER.debug(
+        "row_filters",
+        extra={
+            "table": table.name,
+            "row_filters": row_filters,
+        },
+    )
+
     completed_filenames = []
     try:
         last_import_filename = None
@@ -459,21 +467,30 @@ def download_and_import_incremental_parquet(
                 # TODO: this is wrong. we should sleep until next_start_timestamp + incremental_duration
                 # sleep_amount = min(30, settings.incremental_duration / 2.0)
 
-                sleep_amount = (
-                    next_start_timestamp + settings.incremental_duration - time.time()
+                # we add 1 because the pipeline isn't instantaneous
+                file_expected_in = (
+                    next_start_timestamp
+                    + settings.incremental_duration
+                    + 1
+                    - time.time()
                 )
 
-                if sleep_amount < 0:
-                    sleep_amount = min(1, settings.incremental_duration / 10.0)
+                if file_expected_in <= 0:
+                    # file can be created. they aren't created instantly though. retry after sleeping
                     overdue = True
+                    sleep_amount = max(1, settings.incremental_duration / 10.0)
                 else:
+                    # file is expected to be created soon. wait for it
                     overdue = False
+                    sleep_amount = file_expected_in
 
                 extra = {
                     "overdue": overdue,
                     "table": table.name,
+                    "file_expected_in": file_expected_in,
                     "sleep_amount": sleep_amount,
                     "start_timestamp": next_start_timestamp,
+                    "now": now,
                 }
 
                 LOGGER.debug(
@@ -702,6 +719,8 @@ def main(settings: Settings):
                     row_filters = orjson.loads(f.read())
             else:
                 row_filters = {}
+
+            LOGGER.debug("all row_filters: %s", row_filters)
 
             futures = {
                 table_executor.submit(

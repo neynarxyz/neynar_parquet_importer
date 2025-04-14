@@ -275,7 +275,7 @@ def resumable_download(
 
     os.rename(local_incoming_path, local_file_path)
 
-    LOGGER.debug("Finished downloading: %s", local_file_path)
+    # LOGGER.debug("Finished downloading: %s", local_file_path)
 
 
 def _resumable_download_chunk(
@@ -305,15 +305,17 @@ def _resumable_download_chunk(
         range_header = f"bytes={range_start}-{chunk_end}"
 
         if start_size == 0:
-            LOGGER.debug(
-                "new download",
-                extra={
-                    "key": s3_key,
-                    "chunk": chunk_path,
-                    "range_header": range_header,
-                    "final_size": final_size,
-                },
-            )
+            # this is too verbose
+            # LOGGER.debug(
+            #     "new download",
+            #     extra={
+            #         "key": s3_key,
+            #         "chunk": chunk_path,
+            #         "range_header": range_header,
+            #         "final_size": final_size,
+            #     },
+            # )
+            pass
         else:
             LOGGER.debug(
                 "resuming download",
@@ -341,7 +343,7 @@ def _resumable_download_chunk(
     if os.path.getsize(chunk_path) != final_size:
         raise ValueError("Downloaded file is not the expected size", chunk_path)
 
-    LOGGER.debug("Finished downloading: %s", chunk_path)
+    # LOGGER.debug("Finished downloading: %s", chunk_path)
 
     return chunk_path
 
