@@ -111,12 +111,15 @@ def sync_parquet_to_db(
 
         s3_client = get_s3_client(settings)
 
-        existing_full_result = check_for_past_full_import(
-            db_engine,
-            parquet_import_tracking,
-            settings,
-            table,
-        )
+        if settings.skip_full_import:
+            existing_full_result = None
+        else:
+            existing_full_result = check_for_past_full_import(
+                db_engine,
+                parquet_import_tracking,
+                settings,
+                table,
+            )
 
         if existing_full_result is not None:
             (full_filename, full_completed) = existing_full_result
@@ -159,7 +162,7 @@ def sync_parquet_to_db(
         else:
             LOGGER.debug("no full in the tracking table", extra={"table": table.name})
             full_filename = None
-            full_completed = False
+            full_completed = settings.skip_full_import
             last_import_filename = None
             incremental_filename = None
 
@@ -251,10 +254,19 @@ def sync_parquet_to_db(
             full_completed = True
             last_import_filename = full_filename
 
-        next_start_timestamp = parse_parquet_filename(last_import_filename)[
-            "end_timestamp"
-        ]
-        next_end_timestamp = next_start_timestamp + settings.incremental_duration
+        if last_import_filename is None:
+            next_end_timestamp = int(
+                time.time()
+                // settings.incremental_duration
+                * settings.incremental_duration
+            )
+            next_start_timestamp = next_end_timestamp - settings.incremental_duration
+            LOGGER.info("starting import from NOW")
+        else:
+            next_start_timestamp = parse_parquet_filename(last_import_filename)[
+                "end_timestamp"
+            ]
+            next_end_timestamp = next_start_timestamp + settings.incremental_duration
 
         max_wait_duration = max(90, 4 * settings.incremental_duration)
 
@@ -444,9 +456,21 @@ def download_and_import_incremental_parquet(
 
             if incremental_filename is None:
                 # TODO: how long should we sleep? polling isn't great, but SNS seems inefficient with a bunch of tables and short durations
-                sleep_amount = min(30, settings.incremental_duration / 2.0)
+                # TODO: this is wrong. we should sleep until next_start_timestamp + incremental_duration
+                # sleep_amount = min(30, settings.incremental_duration / 2.0)
+
+                sleep_amount = (
+                    next_start_timestamp + settings.incremental_duration - time.time()
+                )
+
+                if sleep_amount < 0:
+                    sleep_amount = min(1, settings.incremental_duration / 10.0)
+                    overdue = True
+                else:
+                    overdue = False
 
                 extra = {
+                    "overdue": overdue,
                     "table": table.name,
                     "sleep_amount": sleep_amount,
                     "start_timestamp": next_start_timestamp,
