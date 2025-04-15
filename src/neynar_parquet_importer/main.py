@@ -226,7 +226,7 @@ def sync_parquet_to_db(
             if full_filename is not None:
                 parsed_filename = parse_parquet_filename(full_filename)
 
-                if parsed_filename["end_timestamp"] <= maximum_parquet_age():
+                if parsed_filename["end_timestamp"] <= maximum_parquet_age(None):
                     LOGGER.warning(
                         "full is too old. starting over", extra={"table": table.name}
                     )
