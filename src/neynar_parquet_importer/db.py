@@ -24,7 +24,7 @@ from neynar_parquet_importer.row_filters import include_row
 
 from .logger import LOGGER
 from .s3 import parse_parquet_filename
-from .settings import SHUTDOWN_EVENT, Settings
+from .settings import SHUTDOWN_EVENT, Settings, ShuttingDown
 
 # TODO: detect this from the table
 # TODO: this should be a dict of table names to column names
@@ -188,6 +188,8 @@ def check_for_past_full_import(
         select(
             parquet_import_tracking.c.file_name,
             parquet_import_tracking.c.completed,
+            parquet_import_tracking.c.last_row_group_imported,
+            parquet_import_tracking.c.total_row_groups,
         )
         .where(parquet_import_tracking.c.file_type == "full")
         .where(parquet_import_tracking.c.table_name == table.name)
@@ -206,8 +208,16 @@ def check_for_past_full_import(
 
     latest_filename = Path(result[0])
     completed: bool = result[1]
+    last_row_group_imported: int = result[2]
+    total_row_groups: int = result[3]
 
-    return (latest_filename, completed)
+    actually_completed = (
+        last_row_group_imported
+        and last_row_group_imported == total_row_groups - 1
+        and completed
+    )
+
+    return (latest_filename, actually_completed)
 
 
 def clean_v2_parquet_data(col_name, value):
@@ -429,7 +439,7 @@ def import_parquet(
         )
 
         if f_shutdown in done:
-            return
+            raise ShuttingDown("shutting down during import_parquet")
 
         assert f in done
 
@@ -513,8 +523,7 @@ def import_parquet(
 
 def sleep_or_raise_shutdown(t):
     if SHUTDOWN_EVENT.wait(t):
-        # TODO: raise cancelled error instead
-        raise RuntimeError("shutting down instead of sleeping")
+        raise ShuttingDown("shutting down instead of sleeping")
 
 
 @retry(

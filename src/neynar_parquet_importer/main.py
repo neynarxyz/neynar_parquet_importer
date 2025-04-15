@@ -5,7 +5,7 @@ import signal
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 import traceback
 import dotenv
@@ -119,18 +119,17 @@ def sync_parquet_to_db(
 
         s3_client = get_s3_client(settings)
 
-        if settings.skip_full_import:
-            existing_full_result = None
-        else:
-            existing_full_result = check_for_past_full_import(
-                db_engine,
-                parquet_import_tracking,
-                settings,
-                table,
-            )
+        existing_full_result = check_for_past_full_import(
+            db_engine,
+            parquet_import_tracking,
+            settings,
+            table,
+        )
 
         if existing_full_result is not None:
             (full_filename, full_completed) = existing_full_result
+        elif settings.skip_full_import:
+            raise NotImplementedError
         else:
             full_filename = None
             full_completed = False
@@ -170,7 +169,7 @@ def sync_parquet_to_db(
         else:
             LOGGER.debug("no full in the tracking table", extra={"table": table.name})
             full_filename = None
-            full_completed = settings.skip_full_import
+            full_completed = False
             last_import_filename = None
             incremental_filename = None
 
@@ -299,7 +298,7 @@ def sync_parquet_to_db(
                     # )
                 elif fs[0].cancelled():
                     LOGGER.debug("cancelled")
-                    return
+                    raise CancelledError
                 else:
                     if time.time() >= next_start_timestamp:
                         # time to spawn the next file
@@ -328,11 +327,7 @@ def sync_parquet_to_db(
                 sleep_amount = min(1, sleep_amount)
 
             if SHUTDOWN_EVENT.wait(sleep_amount):
-                LOGGER.debug(
-                    "shutting down sync_parquet_to_db",
-                    extra={"table": table.name},
-                )
-                return
+                raise ShuttingDown("shutting down sync_parquet_to_db", table.name)
 
             # spawn a task on file_executor here
             f = file_executor.submit(
@@ -434,7 +429,7 @@ def download_and_import_incremental_parquet(
     try:
         while incremental_filename is None:
             if SHUTDOWN_EVENT.is_set():
-                return
+                raise ShuttingDown()
 
             now = time.time()
             if now > max_wait:
@@ -503,11 +498,10 @@ def download_and_import_incremental_parquet(
                 )
 
                 if SHUTDOWN_EVENT.wait(sleep_amount):
-                    LOGGER.debug(
+                    raise ShuttingDown(
                         "shutting down during download_and_import_incremental_parquet",
-                        extra=extra,
+                        extra,
                     )
-                    return
 
         import_parquet(
             db_engine,
@@ -530,8 +524,7 @@ def download_and_import_incremental_parquet(
         return
     except Exception as e:
         if e.args == ("cannot schedule new futures after shutdown",):
-            LOGGER.debug("Executor is shutting down during sync_parquet_to_db")
-            return
+            raise ShuttingDown("Executor is shutting down during sync_parquet_to_db", e)
 
         LOGGER.exception("exception inside download_and_import_incremental_parquet")
         SHUTDOWN_EVENT.set()
