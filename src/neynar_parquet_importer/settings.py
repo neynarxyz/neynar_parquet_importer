@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     app_uuid: str | None = None
     datadog_enabled: bool = True
-    download_workers: int = 16
+    download_workers: int = 32
     exit_after_max_wait: bool = False  # TODO: improve this more
     file_workers: int = 4
     filter_file: Path | None = None
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     postgres_pool_size: int = 90
     postgres_poolclass: str = "QueuePool"
     postgres_schema: str = "public"
-    row_workers: int = 10
+    row_workers: int = 4
     skip_full_import: bool = False
     s3_pool_size: int = 100
     target_name: str = "unknown"
