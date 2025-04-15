@@ -527,7 +527,7 @@ def sleep_or_raise_shutdown(t):
 
 
 @retry(
-    stop=stop_after_attempt(10),
+    stop=stop_after_attempt(5),
     wait=wait_random_exponential(multiplier=0.1, max=10),
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
@@ -536,13 +536,19 @@ def sleep_or_raise_shutdown(t):
 )
 def execute_with_retry(engine, stmt):
     with engine.connect() as conn:
-        result = conn.execute(stmt)
+        try:
+            result = conn.execute(stmt)
+        except Exception as e:
+            if hasattr(e, "statement"):
+                e.statement = None
+            raise
+
         conn.commit()
         return result
 
 
 @retry(
-    stop=stop_after_attempt(10),
+    stop=stop_after_attempt(5),
     wait=wait_random_exponential(multiplier=0.1, max=10),
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
