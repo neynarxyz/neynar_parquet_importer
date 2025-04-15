@@ -129,7 +129,8 @@ def sync_parquet_to_db(
         if existing_full_result is not None:
             (full_filename, full_completed) = existing_full_result
         elif settings.skip_full_import:
-            raise NotImplementedError
+            full_filename = None
+            full_completed = False
         else:
             full_filename = None
             full_completed = False
@@ -155,7 +156,7 @@ def sync_parquet_to_db(
                 last_import_filename = None
                 incremental_filename = None
 
-        if existing_full_result is not None:
+        if full_filename:
             LOGGER.debug(
                 "full found",
                 extra={
@@ -169,7 +170,7 @@ def sync_parquet_to_db(
         else:
             LOGGER.debug("no full in the tracking table", extra={"table": table.name})
             full_filename = None
-            full_completed = False
+            full_completed = settings.skip_full_import
             last_import_filename = None
             incremental_filename = None
 

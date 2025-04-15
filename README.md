@@ -70,3 +70,4 @@ This example repo was designed to be simple so that you can easily plug it into 
 - recommended specs/storage space for postgres cluster (disk size for postgres data)
 - run on an EC2 and collect example timings
 - Support more than just postgres. We need a generic way to do UPSERTS
+- row filters should include a version number. then when/if we support something advanced like graphql, we can switch without breaking the old way

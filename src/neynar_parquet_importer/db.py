@@ -174,9 +174,9 @@ def check_for_past_incremental_import(
         )
         return None
 
-    latest_filename = result[0]
+    latest_filename = Path(result[0])
 
-    return Path(latest_filename)
+    return latest_filename
 
 
 def check_for_past_full_import(
