@@ -19,16 +19,15 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 from rich.table import Table
-from sqlalchemy import update
 
 from .progress import ProgressCallback
 from .db import (
     check_for_past_full_import,
     check_for_past_incremental_import,
-    execute_with_retry,
     get_tables,
     import_parquet,
     init_db,
+    mark_completed,
     maximum_parquet_age,
 )
 from .s3 import (
@@ -382,30 +381,6 @@ def sync_parquet_to_db(
 
         # this should run forever. any exit here means we should shut down the whole app
         SHUTDOWN_EVENT.set()
-
-
-def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
-    if not completed_filenames:
-        return
-
-    completed_filenames = [str(c) for c in completed_filenames]
-
-    stmt = (
-        update(parquet_import_tracking)
-        .where(parquet_import_tracking.c.file_name.in_(completed_filenames))
-        .values(completed=True)
-    )
-
-    # # this is too verbose
-    LOGGER.debug(
-        "completed",
-        extra={
-            "last_file": completed_filenames[-1],
-            "num_files": len(completed_filenames),
-        },
-    )
-
-    return execute_with_retry(db_engine, stmt)
 
 
 def download_and_import_incremental_parquet(

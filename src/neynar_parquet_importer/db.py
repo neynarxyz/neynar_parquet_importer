@@ -11,7 +11,16 @@ from os import path
 import re
 from time import time
 import pyarrow.parquet as pq
-from sqlalchemy import MetaData, NullPool, QueuePool, Table, create_engine, select, text
+from sqlalchemy import (
+    MetaData,
+    NullPool,
+    QueuePool,
+    Table,
+    create_engine,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from tenacity import (
     after_log,
@@ -211,11 +220,15 @@ def check_for_past_full_import(
     last_row_group_imported: int = result[2]
     total_row_groups: int = result[3]
 
-    actually_completed = (
-        last_row_group_imported
+    actually_completed = bool(
+        last_row_group_imported is not None
         and last_row_group_imported == total_row_groups - 1
-        and completed
+        # and completed
     )
+
+    # if not completed but all the rows are done, we should mark it as completed now since it actually is done!
+    if not completed and actually_completed:
+        mark_completed(engine, parquet_import_tracking, [latest_filename])
 
     return (latest_filename, actually_completed)
 
@@ -519,6 +532,30 @@ def import_parquet(
                 "file_size": file_size,
             },
         )
+
+
+def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
+    if not completed_filenames:
+        return
+
+    completed_filenames = [str(c) for c in completed_filenames]
+
+    stmt = (
+        update(parquet_import_tracking)
+        .where(parquet_import_tracking.c.file_name.in_(completed_filenames))
+        .values(completed=True)
+    )
+
+    # # this is too verbose
+    LOGGER.debug(
+        "completed",
+        extra={
+            "last_file": completed_filenames[-1],
+            "num_files": len(completed_filenames),
+        },
+    )
+
+    return execute_with_retry(db_engine, stmt)
 
 
 def sleep_or_raise_shutdown(t):
