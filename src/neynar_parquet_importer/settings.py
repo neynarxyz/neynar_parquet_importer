@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     postgres_pool_size: int = 90
     postgres_poolclass: str = "QueuePool"
     postgres_schema: str = "public"
-    row_workers: int = 1
+    row_workers: int = 2
     skip_full_import: bool = False
     s3_pool_size: int = 100
     target_name: str = "unknown"
