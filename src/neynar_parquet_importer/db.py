@@ -1,6 +1,7 @@
 import ast
 import atexit
 from datetime import UTC, datetime
+import inspect
 import logging
 from pathlib import Path
 import concurrent
@@ -26,7 +27,7 @@ from tenacity import (
     after_log,
     retry,
     stop_after_attempt,
-    wait_random_exponential,
+    wait_exponential_jitter,
 )
 
 from neynar_parquet_importer.row_filters import include_row
@@ -563,9 +564,29 @@ def sleep_or_raise_shutdown(t):
         raise ShuttingDown("shutting down instead of sleeping")
 
 
+def our_after_log(retry_state):
+    """
+    Tenacity “after” hook that reports where the wrapped function
+    was invoked from (file:line) on every attempt.
+    """
+    # 0 = this frame, 1 = internal tenacity wrapper, 2 = original caller
+    caller = inspect.stack()[2]
+    LOGGER.warning(
+        "attempt %d on %s raised %s  ← called from %s:%d",
+        retry_state.attempt_number,
+        retry_state.fn.__name__,
+        retry_state.outcome.exception() if retry_state.outcome else None,
+        caller.filename,
+        caller.lineno,
+    )
+    # Avoid reference cycles created by inspect
+    del caller
+
+
+# TODO: refactor this to log the caller's location!
 @retry(
     stop=stop_after_attempt(5),
-    wait=wait_random_exponential(multiplier=0.1, max=10),
+    wait=wait_exponential_jitter(initial=0.4, max=10),
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
@@ -584,9 +605,10 @@ def execute_with_retry(engine, stmt):
         return result
 
 
+# TODO: refactor this to log the caller's location!
 @retry(
     stop=stop_after_attempt(5),
-    wait=wait_random_exponential(multiplier=0.1, max=10),
+    wait=wait_exponential_jitter(initial=0.4, max=10),
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
