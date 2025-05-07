@@ -73,6 +73,7 @@ ALL_TABLES = {
         "follows": {},
         # "neynar_user_scores": {},  # NOTE: this table costs extra. Talk to us if you need it
         "profiles": {},
+        "usernames": {},
         "verifications": {},
     },
 }
