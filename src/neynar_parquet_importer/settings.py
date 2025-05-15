@@ -5,9 +5,10 @@ import time
 import datadog
 from pathlib import Path
 from pydantic import Field, PostgresDsn
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from neynar_parquet_importer.logger import setup_logging
+from .logger import setup_logging
+from .neynar_api import NeynarApiClient
 
 SHUTDOWN_EVENT = threading.Event()
 
@@ -33,6 +34,8 @@ class Settings(BaseSettings):
     local_input_only: bool = False  # useful for development
     log_format: str = "json"
     log_level: str = "INFO"
+    neynar_api_key: str | None = None
+    neynar_api_url: str = "https://api.neynar.com"
     npe_version: str = "v2"
     parquet_s3_bucket: str = "tf-premium-parquet"
     parquet_s3_database: str = "public-postgres"
@@ -48,6 +51,12 @@ class Settings(BaseSettings):
     skip_full_import: bool = False
     s3_pool_size: int = 100
     target_name: str = "unknown"
+
+    model_config = SettingsConfigDict(
+        env_file=os.environ.get("ENV_FILE", ".env"),
+        env_file_encoding="utf-8",
+        extra="allow",
+    )
 
     def initialize(self):
         if not self.postgres_schema:
@@ -130,3 +139,9 @@ class Settings(BaseSettings):
 
     def incoming_dir(self):
         return self.target_dir() / f".incoming.{self.target_name}"
+
+    def neynar_api_client(self):
+        return NeynarApiClient.new(
+            api_key=self.neynar_api_key,
+            api_url=self.neynar_api_url,
+        )
