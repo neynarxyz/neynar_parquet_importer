@@ -37,7 +37,9 @@ class Settings(BaseSettings):
     parquet_s3_bucket: str = "tf-premium-parquet"
     parquet_s3_database: str = "public-postgres"
     parquet_s3_schema: str = "farcaster"
-    postgres_dsn: PostgresDsn = "postgresql+psycopg://postgres:postgres@localhost:15432/example_neynar_parquet_importer"
+    postgres_dsn: PostgresDsn = PostgresDsn(
+        "postgresql+psycopg://postgres:postgres@localhost:15432/example_neynar_parquet_importer"
+    )
     postgres_max_overflow: int = 10
     postgres_pool_size: int = 90
     postgres_poolclass: str = "QueuePool"
