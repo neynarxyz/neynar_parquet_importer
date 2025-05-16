@@ -401,7 +401,10 @@ def import_parquet(
 
     primary_key_columns = table.primary_key.columns.values()
 
-    cu_metric = settings.cu_mode.metric()
+    if settings.datadog_enabled:
+        cu_metric = settings.cu_mode.metric()
+    else:
+        cu_metric = None
 
     if cu_metric:
         # TODO: get this from the cache
