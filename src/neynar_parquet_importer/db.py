@@ -303,6 +303,7 @@ def import_parquet(
 
     dd_tags = [
         f"parquet_table:{schema_name}.{table.name}",
+        f"path:parquet-importer/{schema_name}.{table.name}",
     ]
 
     is_empty = local_file.suffix == ".empty"
