@@ -105,7 +105,6 @@ class Settings(BaseSettings):
         self.setup_logging()
 
         logging.info("some settings", extra={"cu_mode": self.cu_mode})
-        raise NotImplementedError
 
     def setup_datadog(self):
         statsd_constant_tags = [
