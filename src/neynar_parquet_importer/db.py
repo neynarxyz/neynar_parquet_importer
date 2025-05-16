@@ -150,7 +150,7 @@ def check_for_past_incremental_import(
     parquet_import_tracking: Table,
     settings: Settings,
     table: Table,
-) -> Path:
+) -> Path | None:
     """
     Returns the filename for the newest completed incremental.
     There may be some partially imported files after this.
@@ -401,8 +401,18 @@ def import_parquet(
 
     primary_key_columns = table.primary_key.columns.values()
 
+    cu_metric = settings.cu_mode.metric()
+
+    if cu_metric:
+        # TODO: get this from the cache
+        row_cu_cost = 0
+        filtered_row_cu_cost = 0
+    else:
+        row_cu_cost = 0
+        filtered_row_cu_cost = 0
+
     # Read the data in batches
-    # TODO: parallelize this. the import tracking needs to be done in order though!
+    # the batches are imported in parallel. the tracking table is updated in submit order
     fs = []
     for i in range(start_row_group, num_row_groups):
         # TODO: larger batches with `pf.iter_batches(batch_size=X)` instead of row groups
@@ -428,6 +438,9 @@ def import_parquet(
             progress_callback,
             row_filters,
             table,
+            cu_metric,
+            row_cu_cost,
+            filtered_row_cu_cost,
         )
 
         fs.append(f)
@@ -644,6 +657,9 @@ def process_batch(
     progress_callback,
     row_filters,
     table,
+    cu_metric: str | None,
+    row_cu_cost: int,
+    filtered_row_cu_cost: int,
 ):
     # This is too verbose
     # LOGGER.debug("starting batch #%s", i)
@@ -689,19 +705,32 @@ def process_batch(
         filtered_rows = orig_rows_len - rows_len
 
         if filtered_rows:
-            LOGGER.debug(
-                "filtered",
-                extra={
-                    "num_filtered": filtered_rows,
-                    "rows": rows_len,
-                    "table": table.name,
-                },
-            )
+            extra = {
+                "num_filtered": filtered_rows,
+                "rows": rows_len,
+                "table": table.name,
+            }
+
+            if cu_metric:
+                cu_cost = filtered_rows * filtered_row_cu_cost
+
+                extra["cu_cost"] = cu_cost
+
+                # TODO: add another tag that shows that this is for filtered data?
+                statsd.increment(
+                    cu_metric,
+                    value=cu_cost,
+                    tags=dd_tags,
+                )
+
+            LOGGER.debug("filtered", extra=extra)
+
             statsd.increment(
                 "num_parquet_rows_filtered",
                 value=filtered_rows,
                 tags=dd_tags,
             )
+
     else:
         rows_len = len(rows)
         filtered_rows = 0
@@ -729,8 +758,6 @@ def process_batch(
         stmt = pg_insert(table).values(rows)
 
         # only upsert where updated_at is newer than the existing row
-        # TODO: for some tables (like links, we need to pass a constraint here!)
-        # TODO: support tables that don't have an updated_at? so far everything must
         upsert_stmt = stmt.on_conflict_do_update(
             index_elements=primary_key_columns,
             set_={col: stmt.excluded[col] for col in row_keys},
@@ -770,6 +797,19 @@ def process_batch(
         tags=dd_tags,
     )
 
+    if cu_metric:
+        cu_cost = rows_len * row_cu_cost
+
+        logging.debug("cu_cost", extra={"cu_cost": cu_cost, "num_rows": rows_len})
+
+        statsd.increment(
+            cu_metric,
+            value=cu_cost,
+            tags=dd_tags,
+        )
+
     progress_callback(1)
 
+    # TODO: better return type for this so we don't mix up values
+    # TODO: include the cu cost and filtered rows in this?
     return (i, file_age_s, row_age_s, last_updated_at)

@@ -6,11 +6,31 @@ import datadog
 from pathlib import Path
 from pydantic import Field, PostgresDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from enum import Enum
 
 from .logger import setup_logging
 from .neynar_api import NeynarApiClient
 
 SHUTDOWN_EVENT = threading.Event()
+
+
+class CuMode(str, Enum):
+    OFF = "off"
+    ON = "on"
+    SHADOW = "shadow"
+
+    def enabled(self) -> bool:
+        return self != CuMode.OFF
+
+    def metric(self) -> str | None:
+        if self == CuMode.ON:
+            logging.warning("REMOVE BEFORE FLIGHT. metrics forced to shadow")
+            # return "usage.cu"
+            return "shadow.usage.cu"
+        elif self == CuMode.SHADOW:
+            return "shadow.usage.cu"
+        elif self == CuMode.OFF:
+            return None
 
 
 class ShuttingDown(Exception):
@@ -23,6 +43,7 @@ class Settings(BaseSettings):
     views: str = ""
 
     app_uuid: str | None = None
+    cu_mode: CuMode = CuMode.OFF
     datadog_enabled: bool = True
     download_workers: int = 32
     exit_after_max_wait: bool = False  # TODO: improve this more
