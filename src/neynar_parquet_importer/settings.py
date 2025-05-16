@@ -19,6 +19,9 @@ class CuMode(str, Enum):
     ON = "on"
     SHADOW = "shadow"
 
+    def enabled(self) -> bool:
+        return self != CuMode.OFF
+
     def metric(self) -> str | None:
         if self == CuMode.ON:
             logging.warning("REMOVE BEFORE FLIGHT. metrics forced to shadow")
@@ -103,9 +106,6 @@ class Settings(BaseSettings):
 
         self.setup_datadog()
         self.setup_logging()
-
-        logging.info("some settings", extra={"cu_mode": self.cu_mode})
-        raise NotImplementedError
 
     def setup_datadog(self):
         statsd_constant_tags = [
