@@ -425,15 +425,16 @@ def import_parquet(
         row_cu_cost = 0
         filtered_row_cu_cost = 0
 
-    logging.debug(
-        "cu",
-        extra={
-            "cu_mode": settings.cu_mode,
-            "cu_metric": cu_metric,
-            "row_cu_cost": row_cu_cost,
-            "filtered_row_cu_cost": filtered_row_cu_cost,
-        },
-    )
+    # # this is too verbose
+    # logging.debug(
+    #     "pricing settings",
+    #     extra={
+    #         "cu_mode": settings.cu_mode,
+    #         "cu_metric": cu_metric,
+    #         "row_cu_cost": row_cu_cost,
+    #         "filtered_row_cu_cost": filtered_row_cu_cost,
+    #     },
+    # )
 
     # Read the data in batches
     # the batches are imported in parallel. the tracking table is updated in submit order
