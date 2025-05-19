@@ -35,12 +35,14 @@ class NeynarApiClient:
         return response.json()
 
     @cachedmethod(lambda self: self.cache)
-    def get_portal_pricing(self, product: str):
+    def get_portal_pricing(self, product: str) -> dict[str, int]:
         raw_json = self.get("/portal/pricing")
 
         try:
-            return raw_json["pricing"]["products"]["data"][product]
+            product_pricing = raw_json["pricing"]["products"]["data"][product][product]
         except KeyError:
             raise KeyError(
                 f"Product {product} not found in pricing data. Valid products: {list(raw_json['pricing']['products']['data'].keys())}"
             )
+
+        return {key: value["price"]["amount"] for key, value in product_pricing.items()}

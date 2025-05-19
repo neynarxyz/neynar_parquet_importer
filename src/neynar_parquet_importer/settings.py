@@ -138,7 +138,7 @@ class Settings(BaseSettings):
         else:
             logging.getLogger("datadog.dogstatsd").setLevel(100)
 
-    def parquet_s3_prefix(self):
+    def parquet_s3_prefix(self) -> str:
         prefix = (
             f"{self.parquet_s3_database}/{self.parquet_s3_schema}/{self.npe_version}/"
         )
@@ -150,17 +150,17 @@ class Settings(BaseSettings):
 
         return prefix
 
-    def target_dir(self):
+    def target_dir(self) -> Path:
         return (
             self.local_input_dir / self.npe_version / self.parquet_s3_database
             # don't include the schema. it's alredy in the filename
             # / self.parquet_s3_schema
         )
 
-    def incoming_dir(self):
+    def incoming_dir(self) -> Path:
         return self.target_dir() / f".incoming.{self.target_name}"
 
-    def neynar_api_client(self):
+    def neynar_api_client(self) -> NeynarApiClient:
         return NeynarApiClient.new(
             api_key=self.neynar_api_key,
             api_url=self.neynar_api_url,

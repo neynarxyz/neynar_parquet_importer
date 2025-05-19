@@ -408,8 +408,18 @@ def import_parquet(
         cu_metric = None
 
     if cu_metric:
-        # TODO: get this from the cache
-        row_cu_cost = 0
+        neynar_api_client = settings.neynar_api_client()
+
+        pricing_key = f"{schema_name}.{table.name}"
+
+        cu_prices = neynar_api_client.get_portal_pricing("indexer_service")
+
+        row_cu_cost = cu_prices.get(pricing_key)
+
+        if row_cu_cost is None:
+            logging.warning("unknown cu cost", extra={"pricing_key": pricing_key})
+            row_cu_cost = 0
+
         filtered_row_cu_cost = 0
     else:
         row_cu_cost = 0
