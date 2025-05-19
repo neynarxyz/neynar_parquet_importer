@@ -422,17 +422,17 @@ def import_parquet(
 
         filtered_row_cu_cost = 0
 
-        # TODO: this is too verbose
-        logging.info(
-            "pricing settings",
-            extra={
-                "cu_mode": settings.cu_mode,
-                "cu_metric": cu_metric,
-                "row_cu_cost": row_cu_cost,
-                "filtered_row_cu_cost": filtered_row_cu_cost,
-                "pricing_key": pricing_key,
-            },
-        )
+        # # TODO: this is too verbose
+        # logging.info(
+        #     "pricing settings",
+        #     extra={
+        #         "cu_mode": settings.cu_mode,
+        #         "cu_metric": cu_metric,
+        #         "row_cu_cost": row_cu_cost,
+        #         "filtered_row_cu_cost": filtered_row_cu_cost,
+        #         "pricing_key": pricing_key,
+        #     },
+        # )
     else:
         row_cu_cost = 0
         filtered_row_cu_cost = 0
