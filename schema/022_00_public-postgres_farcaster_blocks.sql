@@ -13,7 +13,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.blocks LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_blocks_upsert
-        ON blocks (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.blocks (id, updated_at);
     END IF;
 END $$;
 

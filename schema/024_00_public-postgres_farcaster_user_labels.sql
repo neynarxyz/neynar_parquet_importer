@@ -17,7 +17,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.user_labels LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_user_labels_upsert
-        ON user_labels (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.user_labels (id, updated_at);
     END IF;
 END $$;
 

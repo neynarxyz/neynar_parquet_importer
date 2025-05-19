@@ -34,7 +34,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.casts LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_casts_upsert
-        ON casts (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.casts (id, updated_at);
     END IF;
 END $$;
 

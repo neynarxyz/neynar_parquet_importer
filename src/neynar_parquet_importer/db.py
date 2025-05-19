@@ -405,6 +405,7 @@ def import_parquet(
     if settings.datadog_enabled:
         cu_metric = settings.cu_mode.metric()
     else:
+        raise NotImplementedError("REMOVE BEFORE FLIGHT")
         cu_metric = None
 
     if cu_metric:
@@ -425,16 +426,16 @@ def import_parquet(
         row_cu_cost = 0
         filtered_row_cu_cost = 0
 
-    # # this is too verbose
-    # logging.debug(
-    #     "pricing settings",
-    #     extra={
-    #         "cu_mode": settings.cu_mode,
-    #         "cu_metric": cu_metric,
-    #         "row_cu_cost": row_cu_cost,
-    #         "filtered_row_cu_cost": filtered_row_cu_cost,
-    #     },
-    # )
+    # TODO: this is too verbose
+    logging.info(
+        "pricing settings",
+        extra={
+            "cu_mode": settings.cu_mode,
+            "cu_metric": cu_metric,
+            "row_cu_cost": row_cu_cost,
+            "filtered_row_cu_cost": filtered_row_cu_cost,
+        },
+    )
 
     # Read the data in batches
     # the batches are imported in parallel. the tracking table is updated in submit order

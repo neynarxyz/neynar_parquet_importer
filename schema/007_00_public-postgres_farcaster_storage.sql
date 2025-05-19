@@ -28,7 +28,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.storage LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_storage_upsert
-        ON storage (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.storage (id, updated_at);
     END IF;
 END $$;
 

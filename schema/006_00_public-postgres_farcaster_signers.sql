@@ -31,7 +31,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.signers LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_signers_upsert
-        ON signers (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.signers (id, updated_at);
     END IF;
 END $$;
 

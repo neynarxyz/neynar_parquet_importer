@@ -29,7 +29,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.user_data LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_user_data_upsert
-        ON user_data (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.user_data (id, updated_at);
     END IF;
 END $$;
 

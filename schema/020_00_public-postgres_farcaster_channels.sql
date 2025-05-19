@@ -19,7 +19,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.channels LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_channels_upsert
-        ON channels (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.channels (id, updated_at);
     END IF;
 END $$;
 

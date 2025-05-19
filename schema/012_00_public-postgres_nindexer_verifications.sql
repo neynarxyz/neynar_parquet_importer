@@ -16,7 +16,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.verifications LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_verifications_upsert
-        ON verifications (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.verifications (id, updated_at);
     END IF;
 END $$;
 

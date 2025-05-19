@@ -19,7 +19,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.reactions LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_reactions_upsert
-        ON reactions (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.reactions (id, updated_at);
     END IF;
 END $$;
 

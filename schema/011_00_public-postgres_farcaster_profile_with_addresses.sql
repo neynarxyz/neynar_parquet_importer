@@ -14,7 +14,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.profile_with_addresses LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_profile_with_addresses_upsert
-        ON profile_with_addresses (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.profile_with_addresses (id, updated_at);
     END IF;
 END $$;
 

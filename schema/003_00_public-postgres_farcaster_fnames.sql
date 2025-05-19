@@ -15,7 +15,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.fnames LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_fnames_upsert
-        ON fnames (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.fnames (id, updated_at);
     END IF;
 END $$;
 

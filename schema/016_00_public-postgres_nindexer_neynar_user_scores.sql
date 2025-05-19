@@ -26,7 +26,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.neynar_user_scores LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_neynar_user_scores_upsert
-        ON neynar_user_scores (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.neynar_user_scores (id, updated_at);
     END IF;
 END $$;
 
