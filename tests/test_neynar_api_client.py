@@ -10,7 +10,7 @@ def test_get_portal_pricing():
         api_url=settings.neynar_api_url,
     )
 
-    x = client.get_portal_pricing("indexer_as_a_service")
+    x = client.get_portal_pricing("indexer_service")
 
     print(x)
 
