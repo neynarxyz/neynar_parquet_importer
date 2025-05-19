@@ -41,6 +41,12 @@ BEGIN
         ALTER TABLE ${POSTGRES_SCHEMA}.profiles
         ADD COLUMN primary_sol_address bytea;
     END IF;
+
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.profiles LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_profiles_upsert
+        ON profiles (id, updated_at);
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS profiles_fid ON ${POSTGRES_SCHEMA}.profiles (fid);

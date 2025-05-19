@@ -27,6 +27,12 @@ BEGIN
         -- Drop the constraint
         ALTER TABLE ${POSTGRES_SCHEMA}.signers DROP CONSTRAINT unique_timestamp_fid_signer;
     END IF;
+
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.signers LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_signers_upsert
+        ON signers (id, updated_at);
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS signers_fid ON ${POSTGRES_SCHEMA}.signers (fid);

@@ -24,6 +24,12 @@ BEGIN
         -- Drop the constraint
         ALTER TABLE ${POSTGRES_SCHEMA}.storage DROP CONSTRAINT unique_fid_units_expiry;
     END IF;
+
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.storage LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_storage_upsert
+        ON storage (id, updated_at);
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS storage_fid ON ${POSTGRES_SCHEMA}.storage (fid);

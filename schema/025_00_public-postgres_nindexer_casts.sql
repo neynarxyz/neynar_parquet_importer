@@ -29,4 +29,14 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.casts
     deleter_app_fid bigint
 );
 
+DO $$
+BEGIN
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.casts LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_casts_upsert
+        ON casts (id, updated_at);
+    END IF;
+END $$;
+
+
 CREATE INDEX IF NOT EXISTS casts_hash ON ${POSTGRES_SCHEMA}.casts ("hash");

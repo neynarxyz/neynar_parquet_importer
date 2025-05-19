@@ -22,6 +22,12 @@ BEGIN
         -- Drop the constraint
         ALTER TABLE neynar_user_scores DROP CONSTRAINT neynar_user_scores_fid_key;
     END IF;
+
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.neynar_user_scores LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_neynar_user_scores_upsert
+        ON neynar_user_scores (id, updated_at);
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS neynar_user_scores_fid ON ${POSTGRES_SCHEMA}.neynar_user_scores (fid);

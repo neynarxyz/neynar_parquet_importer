@@ -27,6 +27,12 @@ BEGIN
         -- Drop the constraint
         ALTER TABLE ${POSTGRES_SCHEMA}.reactions DROP CONSTRAINT reactions_hash_unique;
     END IF;
+
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.reactions LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_reactions_upsert
+        ON reactions (id, updated_at);
+    END IF;
 END $$;
 
 -- TODO: add indexes to the tables as needed

@@ -12,6 +12,16 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.user_labels
     deleted_at timestamp without time zone
 );
 
+DO $$
+BEGIN
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.user_labels LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_user_labels_upsert
+        ON user_labels (id, updated_at);
+    END IF;
+END $$;
+
+
 CREATE INDEX IF NOT EXISTS user_labels_provider_fid ON ${POSTGRES_SCHEMA}.user_labels (provider_fid);
 CREATE INDEX IF NOT EXISTS user_labels_target_fid ON ${POSTGRES_SCHEMA}.user_labels (target_fid);
 CREATE INDEX IF NOT EXISTS user_labels_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.user_labels ("timestamp") WHERE deleted_at IS NULL;
