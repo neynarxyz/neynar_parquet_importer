@@ -48,9 +48,12 @@ BEGIN
         ALTER INDEX ${POSTGRES_SCHEMA}.idx_parquet_import_tracking_imported_at
         RENAME TO idx_parquet_import_tracking_end_timestamp;
     END IF;
-END $$;
 
-CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_table_name ON ${POSTGRES_SCHEMA}.parquet_import_tracking(table_name);
-CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_table_name_and_version ON ${POSTGRES_SCHEMA}.parquet_import_tracking(table_name, file_version, file_duration_s);
-CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_file_type ON ${POSTGRES_SCHEMA}.parquet_import_tracking(file_type);
-CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_end_timestamp ON ${POSTGRES_SCHEMA}.parquet_import_tracking(end_timestamp);
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.parquet_import_tracking LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_table_name ON ${POSTGRES_SCHEMA}.parquet_import_tracking(table_name);
+        CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_table_name_and_version ON ${POSTGRES_SCHEMA}.parquet_import_tracking(table_name, file_version, file_duration_s);
+        CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_file_type ON ${POSTGRES_SCHEMA}.parquet_import_tracking(file_type);
+        CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_end_timestamp ON ${POSTGRES_SCHEMA}.parquet_import_tracking(end_timestamp);
+    END IF;
+END $$;
