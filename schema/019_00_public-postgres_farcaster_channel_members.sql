@@ -44,4 +44,14 @@ BEGIN
         -- Drop the constraint
         ALTER TABLE ${POSTGRES_SCHEMA}.channel_members DROP CONSTRAINT channel_members_fid_channel_id_unique;
     END IF;
+
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.channel_members LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_channel_members_upsert
+        ON channel_members (id, updated_at);
+    END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS channel_members_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.channel_members ("timestamp") WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS channel_members_fid ON ${POSTGRES_SCHEMA}.channel_members (fid);
+CREATE INDEX IF NOT EXISTS channel_members_channel_id ON ${POSTGRES_SCHEMA}.channel_members (channel_id);

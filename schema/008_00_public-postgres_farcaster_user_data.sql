@@ -25,6 +25,14 @@ BEGIN
         -- Drop the constraint
         ALTER TABLE user_data DROP CONSTRAINT user_data_fid_type_unique;
     END IF;
+
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.user_data LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_user_data_upsert
+        ON user_data (id, updated_at);
+    END IF;
 END $$;
 
--- TODO: add indexes to the tables as needed
+CREATE INDEX IF NOT EXISTS user_data_fid ON ${POSTGRES_SCHEMA}.user_data (fid);
+CREATE INDEX IF NOT EXISTS user_data_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.user_data ("timestamp") WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS user_data_type ON ${POSTGRES_SCHEMA}.user_data (type);

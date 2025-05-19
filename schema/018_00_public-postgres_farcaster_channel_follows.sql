@@ -23,4 +23,14 @@ BEGIN
         -- Drop the constraint
         ALTER TABLE ${POSTGRES_SCHEMA}.channel_follows DROP CONSTRAINT channel_follows_fid_channel_id_unique;
     END IF;
+
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.channel_follows LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_channel_follows_upsert
+        ON channel_follows (id, updated_at);
+    END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS channel_follows_fid ON ${POSTGRES_SCHEMA}.channel_follows (fid);
+CREATE INDEX IF NOT EXISTS channel_follows_channel_id ON ${POSTGRES_SCHEMA}.channel_follows (channel_id);
+CREATE INDEX IF NOT EXISTS channel_follows_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.channel_follows ("timestamp") WHERE deleted_at IS NULL;

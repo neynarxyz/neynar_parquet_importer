@@ -46,4 +46,12 @@ BEGIN
         ALTER TABLE ${POSTGRES_SCHEMA}.follow_counts
         ADD COLUMN filtered_follower_count bigint NULL;
     END IF;
+
+    -- Create the index if the table is empty
+    IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.follow_counts LIMIT 1) THEN
+        CREATE INDEX IF NOT EXISTS idx_follow_counts_upsert
+        ON follow_counts (id, updated_at);
+    END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS follow_counts_fid ON ${POSTGRES_SCHEMA}.follow_counts (fid);
