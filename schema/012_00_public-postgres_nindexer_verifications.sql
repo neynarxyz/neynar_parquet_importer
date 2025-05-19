@@ -10,3 +10,7 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.verifications
     fid bigint NOT NULL,
     protocol smallint NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS verifications_address ON ${POSTGRES_SCHEMA}.verifications ("address");
+CREATE INDEX IF NOT EXISTS verifications_fid ON ${POSTGRES_SCHEMA}.verifications (fid);
+CREATE INDEX IF NOT EXISTS verifications_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.verifications ("timestamp") WHERE deleted_at IS NULL;

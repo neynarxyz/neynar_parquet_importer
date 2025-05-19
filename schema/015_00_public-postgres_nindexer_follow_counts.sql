@@ -47,3 +47,5 @@ BEGIN
         ADD COLUMN filtered_follower_count bigint NULL;
     END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS follow_counts_fid ON ${POSTGRES_SCHEMA}.follow_counts (fid);

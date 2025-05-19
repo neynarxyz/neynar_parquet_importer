@@ -27,4 +27,6 @@ BEGIN
     END IF;
 END $$;
 
--- TODO: add indexes to the tables as needed
+CREATE INDEX IF NOT EXISTS user_data_fid ON ${POSTGRES_SCHEMA}.user_data (fid);
+CREATE INDEX IF NOT EXISTS user_data_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.user_data ("timestamp") WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS user_data_type ON ${POSTGRES_SCHEMA}.user_data (type);

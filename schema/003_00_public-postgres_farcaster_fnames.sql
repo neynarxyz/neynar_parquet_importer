@@ -9,3 +9,5 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.fnames
     deleted_at timestamp without time zone,
     CONSTRAINT fnames_pkey PRIMARY KEY (fname)
 );
+
+CREATE INDEX IF NOT EXISTS fnames_fid ON ${POSTGRES_SCHEMA}.fnames (fid);

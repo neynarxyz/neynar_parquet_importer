@@ -27,4 +27,6 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.casts
     embeds jsonb,
     creator_app_fid bigint,
     deleter_app_fid bigint
-)
+);
+
+CREATE INDEX IF NOT EXISTS casts_hash ON ${POSTGRES_SCHEMA}.casts ("hash");

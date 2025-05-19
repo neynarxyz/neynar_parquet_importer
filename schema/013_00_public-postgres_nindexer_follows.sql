@@ -23,3 +23,7 @@ BEGIN
         ADD COLUMN display_timestamp TIMESTAMP;
     END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS follows_fid ON ${POSTGRES_SCHEMA}.follows (fid);
+CREATE INDEX IF NOT EXISTS follows_target_fid ON ${POSTGRES_SCHEMA}.follows (target_fid);
+CREATE INDEX IF NOT EXISTS follows_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.follows ("timestamp") WHERE deleted_at IS NULL;

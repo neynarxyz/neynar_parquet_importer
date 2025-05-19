@@ -42,3 +42,5 @@ BEGIN
         ADD COLUMN primary_sol_address bytea;
     END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS profiles_fid ON ${POSTGRES_SCHEMA}.profiles (fid);

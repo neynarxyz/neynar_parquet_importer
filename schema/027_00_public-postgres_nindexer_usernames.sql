@@ -9,4 +9,6 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.usernames
     custody_address bytea,
     proof_timestamp timestamp without time zone NOT NULL,
     type smallint NOT NULL
-)
+);
+
+CREATE INDEX IF NOT EXISTS usernames_fid ON ${POSTGRES_SCHEMA}.usernames (fid);

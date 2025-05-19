@@ -10,3 +10,5 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.account_verifications
     platform_username text COLLATE pg_catalog."default" NOT NULL,
     verified_at timestamp without time zone
 );
+
+CREATE INDEX IF NOT EXISTS account_verifications_fid ON ${POSTGRES_SCHEMA}.account_verifications (fid);

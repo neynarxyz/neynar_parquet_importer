@@ -12,4 +12,9 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.reactions
     target_hash bytea,
     target_fid bigint,
     target_url text COLLATE pg_catalog."default"
-)
+);
+
+CREATE INDEX IF NOT EXISTS reactions_fid ON ${POSTGRES_SCHEMA}.reactions (fid);
+CREATE INDEX IF NOT EXISTS reactions_target_fid ON ${POSTGRES_SCHEMA}.reactions (target_fid);
+CREATE INDEX IF NOT EXISTS reactions_target_hash ON ${POSTGRES_SCHEMA}.reactions (target_hash);
+CREATE INDEX IF NOT EXISTS reactions_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.reactions ("timestamp") WHERE deleted_at IS NULL;

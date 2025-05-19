@@ -29,4 +29,6 @@ BEGIN
     END IF;
 END $$;
 
--- TODO: add indexes to the tables as needed
+CREATE INDEX IF NOT EXISTS signers_fid ON ${POSTGRES_SCHEMA}.signers (fid);
+CREATE INDEX IF NOT EXISTS signers_signer ON ${POSTGRES_SCHEMA}.signers (signer);
+CREATE INDEX IF NOT EXISTS signers_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.signers ("timestamp") WHERE deleted_at IS NULL;

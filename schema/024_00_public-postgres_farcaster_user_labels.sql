@@ -10,4 +10,8 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.user_labels
     created_at timestamp without time zone NOT NULL,
     updated_at timestamp without time zone NOT NULL,
     deleted_at timestamp without time zone
-)
+);
+
+CREATE INDEX IF NOT EXISTS user_labels_provider_fid ON ${POSTGRES_SCHEMA}.user_labels (provider_fid);
+CREATE INDEX IF NOT EXISTS user_labels_target_fid ON ${POSTGRES_SCHEMA}.user_labels (target_fid);
+CREATE INDEX IF NOT EXISTS user_labels_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.user_labels ("timestamp") WHERE deleted_at IS NULL;

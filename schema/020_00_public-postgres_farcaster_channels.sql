@@ -13,3 +13,7 @@ CREATE TABLE IF NOT EXISTS ${POSTGRES_SCHEMA}.channels
     follower_count integer NOT NULL,
     "timestamp" timestamp without time zone NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS channels_channel_id ON ${POSTGRES_SCHEMA}.channels (channel_id);
+CREATE INDEX IF NOT EXISTS channels_lead_fid ON ${POSTGRES_SCHEMA}.channels (lead_fid);
+CREATE INDEX IF NOT EXISTS channels_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.channels ("timestamp") WHERE deleted_at IS NULL;

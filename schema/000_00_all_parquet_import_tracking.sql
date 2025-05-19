@@ -49,3 +49,7 @@ BEGIN
         RENAME TO idx_parquet_import_tracking_end_timestamp;
     END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_table_name_and_version ON ${POSTGRES_SCHEMA}.parquet_import_tracking(table_name, file_version, file_duration_s);
+CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_file_type ON ${POSTGRES_SCHEMA}.parquet_import_tracking(file_type);
+CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_end_timestamp ON ${POSTGRES_SCHEMA}.parquet_import_tracking(end_timestamp);
