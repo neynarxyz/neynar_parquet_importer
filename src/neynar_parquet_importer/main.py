@@ -221,7 +221,10 @@ def sync_parquet_to_db(
                         db_engine, parquet_import_tracking, [incremental_filename]
                     )
                 else:
-                    raise ValueError("incremental_filename is missing")
+                    # TODO: need an option to force a new full
+                    raise ValueError(
+                        "incremental_filename is missing. full import needed"
+                    )
         else:
             if full_filename is not None:
                 parsed_filename = parse_parquet_filename(full_filename)

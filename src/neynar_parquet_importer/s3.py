@@ -38,7 +38,7 @@ def download_latest_full(
     settings: Settings,
     table: Table,
     progress_callback,
-):
+) -> Path:
     s3_prefix = settings.parquet_s3_prefix() + "full/"
 
     full_export_prefix = s3_prefix + f"{settings.parquet_s3_schema}-{table.name}-0-"
