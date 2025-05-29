@@ -21,9 +21,7 @@ class CuMode(str, Enum):
 
     def metric(self) -> str | None:
         if self == CuMode.ON:
-            logging.warning("REMOVE BEFORE FLIGHT. metrics forced to shadow")
-            # return "usage.cu"
-            return "shadow.usage.cu"
+            return "usage.cu"
         elif self == CuMode.SHADOW:
             return "shadow.usage.cu"
         elif self == CuMode.OFF:
