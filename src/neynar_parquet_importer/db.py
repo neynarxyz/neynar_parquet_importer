@@ -235,16 +235,26 @@ def check_for_past_full_import(
 
 
 def clean_v2_parquet_data(col_name, value):
+    if value is None:
+        return None
+
     # old v2 tables have json columns stored as strings
     # v3 tables store them as json and don't need this check
-    if col_name in JSON_COLUMNS and isinstance(value, (bytes, str)):
+    if col_name in JSON_COLUMNS:
         try:
-            return orjson.loads(value)
+            if isinstance(value, str):
+                if value.startswith("[{'") or value.startswith("{'"):
+                    return ast.literal_eval(value)
+                else:
+                    return orjson.loads(value)
+            elif isinstance(value, bytes):
+                if value.startswith(b"[{'") or value.startswith(b"{'"):
+                    return ast.literal_eval(str(value))
+                else:
+                    return orjson.loads(value)
         except Exception:
-            LOGGER.warning(
-                "failed to parse json", extra={"col_name": col_name, "value": value}
-            )
-            return ast.literal_eval(value)
+            raise ValueError("failed to parse jsonb column", col_name, value)
+
     # TODO: if this is a datetime column, it is from parquet in milliseconds, not seconds!
     return value
 
@@ -766,17 +776,24 @@ def process_batch(
 
         # TODO: i don't love this. parquet apply things will be much faster. but we already turned it into a python object. will require a larger refactor
         if npe_version == "v2":
-            # TODO: loop col_names first and only call clean on ones that need changes
-            try:
+            # loop col_names first and only call clean on ones that need changes
+            for col_name in row_keys:
+                if col_name not in JSON_COLUMNS:
+                    continue
+
                 for row in rows:
-                    for col_name in row_keys:
+                    try:
                         row[col_name] = clean_v2_parquet_data(col_name, row[col_name])
-            except Exception as e:
-                logging.exception(
-                    "failed to clean parquet data",
-                    extra={"col_name": col_name, "row": row, "x": row[col_name]},
-                )
-                raise ValueError(e)
+                    except Exception as e:
+                        logging.exception(
+                            "failed to clean parquet data",
+                            extra={
+                                "col_name": col_name,
+                                "row": row,
+                                "x": row[col_name],
+                            },
+                        )
+                        raise ValueError(e)
 
         # TODO: use Abstract Base Classes to make this easy to extend/transform
 
