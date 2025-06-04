@@ -425,6 +425,7 @@ def import_parquet(
         cu_prices = neynar_api_client.get_portal_pricing("indexer_service")
 
         row_cu_cost = cu_prices.get(pricing_key)
+        filtered_row_cu_cost = 0
 
         if row_cu_cost is None:
             logging.warning("unknown cu cost", extra={"pricing_key": pricing_key})
