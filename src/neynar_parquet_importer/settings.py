@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     download_workers: int = 32
     exit_after_max_wait: bool = False  # TODO: improve this more
     file_workers: int = 4
+    filtered_row_multiplier: float = 1.1
     filter_file: Path | None = None
     incremental_duration: int = Field(300, alias="npe_duration")
     interactive_debug: bool = False

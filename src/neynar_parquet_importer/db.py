@@ -430,7 +430,10 @@ def import_parquet(
             logging.warning("unknown cu cost", extra={"pricing_key": pricing_key})
             row_cu_cost = 0
 
-        filtered_row_cu_cost = 0
+        if row_filters:
+            filtered_row_cu_cost = row_cu_cost * settings.filtered_row_multiplier
+            # disable row_cu_cost since filtered cost applies to all rows
+            row_cu_cost = 0
 
         # # TODO: this is too verbose
         # logging.info(
@@ -740,32 +743,33 @@ def process_batch(
 
         filtered_rows = orig_rows_len - rows_len
 
-        if filtered_rows:
-            extra = {
-                "num_filtered": filtered_rows,
-                "rows": rows_len,
-                "table": table.name,
-            }
+        extra = {
+            "num_filtered": filtered_rows,
+            "rows": rows_len,
+            "table": table.name,
+        }
 
-            if cu_metric:
-                cu_cost = filtered_rows * filtered_row_cu_cost
+        # where we calculate cost for filtered rows
+        # here calculate the total cost of all the rows, whether filtered or not
+        if cu_metric:
+            cu_cost = orig_rows_len * filtered_row_cu_cost
 
-                extra["cu_cost"] = cu_cost
+            extra["cu_cost"] = cu_cost
 
-                # TODO: add another tag that shows that this is for filtered data?
-                statsd.increment(
-                    cu_metric,
-                    value=cu_cost,
-                    tags=dd_tags,
-                )
-
-            LOGGER.debug("filtered", extra=extra)
-
+            # TODO: add another tag that shows that this is for filtered data?
             statsd.increment(
-                "num_parquet_rows_filtered",
-                value=filtered_rows,
+                cu_metric,
+                value=cu_cost,
                 tags=dd_tags,
             )
+
+        LOGGER.debug("filtered", extra=extra)
+
+        statsd.increment(
+            "num_parquet_rows_filtered",
+            value=filtered_rows,
+            tags=dd_tags,
+        )
 
     else:
         rows_len = len(rows)
@@ -828,7 +832,8 @@ def process_batch(
         tags=dd_tags,
     )
 
-    if cu_metric:
+    # we only calculate the cost here if row filtering is not applied
+    if cu_metric and row_cu_cost > 0:
         cu_cost = rows_len * row_cu_cost
 
         logging.debug("cu_cost", extra={"cu_cost": cu_cost, "num_rows": rows_len})
