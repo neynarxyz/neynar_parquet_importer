@@ -11,7 +11,7 @@ BEGIN
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.warpcast_power_users LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_warpcast_power_users_upsert
-        ON ${POSTGRES_SCHEMA}.warpcast_power_users (id, updated_at);
+        ON ${POSTGRES_SCHEMA}.warpcast_power_users (fid, updated_at);
     END IF;
 END $$;
 
