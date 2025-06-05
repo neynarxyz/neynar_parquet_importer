@@ -14,4 +14,4 @@ def test_get_portal_pricing():
 
     print(x)
 
-    assert False
+    assert x.get("farcaster.account_verifications") is not None
