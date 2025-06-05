@@ -4,11 +4,12 @@ from datetime import UTC, datetime
 import inspect
 import logging
 from pathlib import Path
-import concurrent
+from concurrent import futures
 from datadog import statsd
 import glob
 import orjson
 from os import path
+from os import PathLike
 import re
 from time import time
 import pyarrow.parquet as pq
@@ -301,7 +302,8 @@ def import_parquet(
     row_group_executor,
     row_filters,
     settings: Settings,
-    f_shutdown: concurrent.futures.Future,
+    f_shutdown: futures.Future,
+    backfill: bool = False,
 ):
     if isinstance(local_file, str):
         local_file = Path(local_file)
@@ -346,6 +348,7 @@ def import_parquet(
         is_empty=is_empty,
         last_row_group_imported=last_row_group_imported,
         total_row_groups=num_row_groups,
+        backfill=backfill,
     )
 
     upsert_stmt = stmt.on_conflict_do_update(
@@ -501,8 +504,8 @@ def import_parquet(
     while fs:
         f = fs.pop(0)
 
-        done, not_done = concurrent.futures.wait(
-            [f, f_shutdown], return_when=concurrent.futures.FIRST_COMPLETED
+        done, not_done = futures.wait(
+            [f, f_shutdown], return_when=futures.FIRST_COMPLETED
         )
 
         if f_shutdown in done:
@@ -677,7 +680,7 @@ def fetchone_with_retry(engine, stmt):
 
 def maximum_parquet_age(full_filename: None | str):
     """Only 3 weeks of files are kept in s3"""
-    if full_filename:
+    if full_filename is PathLike:
         parsed_filename = parse_parquet_filename(full_filename)
         return parsed_filename["end_timestamp"]
 

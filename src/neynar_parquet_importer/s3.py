@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import cache
 import math
 import os
+from os.path import basename as path_basename
 from pathlib import Path
 import re
 import shutil
@@ -16,8 +17,8 @@ from .settings import Settings
 
 
 # TODO: stricter type on this. use named groups and just return those
-def parse_parquet_filename(filename: str | Path) -> dict[str, int]:
-    basename = os.path.basename(filename)
+def parse_parquet_filename(filename: os.PathLike) -> dict[str, int]:
+    basename = path_basename(filename)
 
     match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", basename)
     if match:
@@ -83,7 +84,7 @@ def download_latest_full(
 
     if os.path.exists(local_file_path):
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
-        return local_file_path
+        return Path(local_file_path)
 
     incoming_path = settings.incoming_dir() / full_name
 
@@ -98,7 +99,7 @@ def download_latest_full(
         download_threadpool,
     )
 
-    return local_file_path
+    return Path(local_file_path)
 
 
 def download_incremental(

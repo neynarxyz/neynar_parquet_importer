@@ -124,6 +124,7 @@ def sync_parquet_to_db(
             parquet_import_tracking,
             settings,
             table,
+            backfill=False,
         )
 
         if existing_full_result is not None:
@@ -140,6 +141,7 @@ def sync_parquet_to_db(
             parquet_import_tracking,
             settings,
             table,
+            backfill=False,
         )
 
         if incremental_filename:
@@ -181,6 +183,7 @@ def sync_parquet_to_db(
                 parquet_import_tracking,
                 settings,
                 table,
+                backfill=False,
             )
 
             if incremental_filename:
@@ -213,6 +216,8 @@ def sync_parquet_to_db(
                         row_filters,
                         settings,
                         f_shutdown,
+                        backfill_start_timestamp=None,
+                        backfill_end_timestamp=None,
                     )
 
                     last_import_filename = incremental_filename
@@ -259,6 +264,8 @@ def sync_parquet_to_db(
                 row_filters,
                 settings,
                 f_shutdown,
+                backfill_start_timestamp=None,
+                backfill_end_timestamp=None,
             )
 
             mark_completed(db_engine, parquet_import_tracking, [full_filename])
@@ -391,7 +398,7 @@ def download_and_import_incremental_parquet(
     db_engine,
     download_threadpool: ThreadPoolExecutor,
     s3_client,
-    table: Table,
+    table,
     max_wait_duration,
     next_start_timestamp,
     progress_callbacks,
@@ -691,8 +698,9 @@ def main(settings: Settings):
                     },
                 )
 
-            if settings.filter_file:
-                with settings.filter_file.open("r") as f:
+            filter_file = settings.filter_file
+            if filter_file:
+                with filter_file.open("r") as f:
                     row_filters = orjson.loads(f.read())
             else:
                 row_filters = {}
