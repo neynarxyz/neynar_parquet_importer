@@ -103,7 +103,16 @@ class Settings(BaseSettings):
         self.setup_datadog()
         self.setup_logging()
 
-        logging.info("some settings", extra={"cu_mode": self.cu_mode})
+        logging.info(
+            "neynar_parquet_importer is starting",
+            extra={
+                "cu_mode": self.cu_mode,
+                "target": self.target_name,
+                "npe_version": f"{self.npe_version}-{self.incremental_duration}",
+                "parquet_db": self.parquet_s3_database,
+                "parquet_schema": self.parquet_s3_schema,
+            },
+        )
 
     def setup_datadog(self):
         statsd_constant_tags = [

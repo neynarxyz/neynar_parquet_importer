@@ -252,8 +252,8 @@ def clean_jsonb_data(col_name, value):
                 return ast.literal_eval(str(value))
             else:
                 return orjson.loads(value)
-    except Exception:
-        raise ValueError("failed to parse jsonb column", col_name, value)
+    except Exception as exc:
+        raise ValueError("failed to parse jsonb column", col_name, value, exc)
 
     # TODO: if this is a datetime column, it is from parquet in milliseconds, not seconds!
     return value
