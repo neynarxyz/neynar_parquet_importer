@@ -502,6 +502,8 @@ def download_and_import_incremental_parquet(
             row_filters,
             settings,
             f_shutdown,
+            backfill_start_timestamp=None,
+            backfill_end_timestamp=None,
         )
 
         # we got a file. reset max wait
