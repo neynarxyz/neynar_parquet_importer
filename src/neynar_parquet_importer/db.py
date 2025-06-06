@@ -27,6 +27,7 @@ from sqlalchemy.dialects.postgresql.json import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from tenacity import (
     after_log,
+    before_sleep_log,
     retry,
     stop_after_attempt,
     wait_exponential_jitter,
@@ -657,6 +658,7 @@ def our_after_log(retry_state):
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
+    before_sleep=before_sleep_log(LOGGER, logging.WARN),
     reraise=True,
 )
 def execute_with_retry(engine, stmt):
@@ -679,6 +681,7 @@ def execute_with_retry(engine, stmt):
     sleep=sleep_or_raise_shutdown,
     # before=before_log(LOGGER, logging.DEBUG),
     after=after_log(LOGGER, logging.WARN),
+    before_sleep=before_sleep_log(LOGGER, logging.WARN),
     reraise=True,
 )
 def fetchone_with_retry(engine, stmt):
