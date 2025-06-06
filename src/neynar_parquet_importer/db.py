@@ -4,11 +4,12 @@ from datetime import UTC, datetime
 import inspect
 import logging
 from pathlib import Path
-import concurrent
+from concurrent import futures
 from datadog import statsd
 import glob
 import orjson
 from os import path
+from os import PathLike
 import re
 from time import time
 import pyarrow.parquet as pq
@@ -151,6 +152,7 @@ def check_for_past_incremental_import(
     parquet_import_tracking: Table,
     settings: Settings,
     table: Table,
+    backfill: bool,
 ) -> Path | None:
     """
     Returns the filename for the newest completed incremental.
@@ -168,6 +170,7 @@ def check_for_past_incremental_import(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
         )
         .where(parquet_import_tracking.c.completed.is_(True))
+        .where(parquet_import_tracking.c.backfill.is_(backfill))
         .order_by(parquet_import_tracking.c.end_timestamp.desc())
         .limit(1)
     )
@@ -191,7 +194,11 @@ def check_for_past_incremental_import(
 
 
 def check_for_past_full_import(
-    engine, parquet_import_tracking: Table, settings: Settings, table: Table
+    engine,
+    parquet_import_tracking: Table,
+    settings: Settings,
+    table: Table,
+    backfill: bool,
 ):
     """Returns the filename of the newest full import (there should really only be one). This may only be partially imported."""
 
@@ -208,6 +215,7 @@ def check_for_past_full_import(
         .where(
             parquet_import_tracking.c.file_duration_s == settings.incremental_duration
         )
+        .where(parquet_import_tracking.c.backfill.is_(backfill))
         .order_by(parquet_import_tracking.c.end_timestamp.desc())
         .limit(1)
     )
@@ -301,7 +309,10 @@ def import_parquet(
     row_group_executor,
     row_filters,
     settings: Settings,
-    f_shutdown: concurrent.futures.Future,
+    f_shutdown: futures.Future,
+    backfill_start_timestamp: datetime | None,
+    backfill_end_timestamp: datetime | None,
+    backfill: bool = False,
 ):
     if isinstance(local_file, str):
         local_file = Path(local_file)
@@ -346,6 +357,7 @@ def import_parquet(
         is_empty=is_empty,
         last_row_group_imported=last_row_group_imported,
         total_row_groups=num_row_groups,
+        backfill=backfill,
     )
 
     upsert_stmt = stmt.on_conflict_do_update(
@@ -481,6 +493,8 @@ def import_parquet(
             cu_metric,
             row_cu_cost,
             filtered_row_cu_cost,
+            backfill_start_timestamp,
+            backfill_end_timestamp,
         )
 
         fs.append(f)
@@ -501,8 +515,8 @@ def import_parquet(
     while fs:
         f = fs.pop(0)
 
-        done, not_done = concurrent.futures.wait(
-            [f, f_shutdown], return_when=concurrent.futures.FIRST_COMPLETED
+        done, not_done = futures.wait(
+            [f, f_shutdown], return_when=futures.FIRST_COMPLETED
         )
 
         if f_shutdown in done:
@@ -677,7 +691,7 @@ def fetchone_with_retry(engine, stmt):
 
 def maximum_parquet_age(full_filename: None | str):
     """Only 3 weeks of files are kept in s3"""
-    if full_filename:
+    if full_filename is PathLike:
         parsed_filename = parse_parquet_filename(full_filename)
         return parsed_filename["end_timestamp"]
 
@@ -700,6 +714,8 @@ def process_batch(
     cu_metric: str | None,
     row_cu_cost: int,
     filtered_row_cu_cost: int,
+    backfill_start_timestamp: int | None,
+    backfill_end_timestamp: int | None,
 ):
     # This is too verbose
     # LOGGER.debug("starting batch #%s", i)
@@ -734,11 +750,12 @@ def process_batch(
         # TODO: this is probably making this way slower than necessary. im sure there are libraries to do this faster. df -> postgres
         rows = batch.to_pylist()
 
-    if row_filters:
+    # make sure we aren't passing timestamps in for direct_import or main call-ins
+    if row_filters or backfill_start_timestamp is not None or backfill_end_timestamp is not None:
         orig_rows_len = len(rows)
 
         # TODO: check versions of the filters. we might want to support graphql or other formats in the near future
-        rows = list(filter(lambda row: include_row(row, row_filters), rows))
+        rows = list(filter(lambda row: include_row(row, row_filters, backfill_start_timestamp, backfill_end_timestamp), rows))
 
         rows_len = len(rows)
 
@@ -797,7 +814,7 @@ def process_batch(
         upsert_stmt = stmt.on_conflict_do_update(
             index_elements=primary_key_columns,
             set_={col: stmt.excluded[col] for col in row_keys},
-            where=(stmt.excluded["updated_at"] > table.c.updated_at),
+            where=(stmt.excluded["updated_at"] >= table.c.updated_at),
         )
 
         execute_with_retry(engine, upsert_stmt)

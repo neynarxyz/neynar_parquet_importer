@@ -45,12 +45,18 @@ def include_by_col_data(col_data, filters: dict) -> bool:
     return True
 
 
-def include_row(row: dict, filters: dict | None) -> bool:
+def include_row(row: dict, filters: dict | None, backfill_start_timestamp: int | None = None, backfill_end_timestamp: int | None = None) -> bool:
     """
     Filters a row based on the provided filters. Rows we want will return "True"
     """
-    if filters is None:
-        return False
+    if backfill_start_timestamp is not None:
+        if row["updated_at"] < backfill_start_timestamp:
+            return False
+    if backfill_end_timestamp is not None:
+        if row["updated_at"] > backfill_end_timestamp:
+            return False
+    if filters is None or len(filters) == 0:
+        return True
 
     for key, value in filters.items():
         if key == "$and":

@@ -49,6 +49,18 @@ BEGIN
         RENAME TO idx_parquet_import_tracking_end_timestamp;
     END IF;
 
+    -- create backfill column
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'parquet_import_tracking'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+        AND column_name = 'backfill'
+    ) THEN
+        ALTER TABLE ${POSTGRES_SCHEMA}.parquet_import_tracking
+        ADD COLUMN backfill BOOLEAN DEFAULT FALSE;
+    END IF;
+
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.parquet_import_tracking LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_parquet_import_tracking_table_name ON ${POSTGRES_SCHEMA}.parquet_import_tracking(table_name);

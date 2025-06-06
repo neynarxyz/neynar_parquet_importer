@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import cache
 import math
 import os
+from os.path import basename as path_basename
 from pathlib import Path
 import re
 import shutil
@@ -16,8 +17,8 @@ from .settings import Settings
 
 
 # TODO: stricter type on this. use named groups and just return those
-def parse_parquet_filename(filename: str | Path) -> dict[str, int]:
-    basename = os.path.basename(filename)
+def parse_parquet_filename(filename: os.PathLike) -> dict[str, int]:
+    basename = path_basename(filename)
 
     match = re.match(r"(.+)-(.+)-(\d+)-(\d+)\.(?:parquet|empty)", basename)
     if match:
@@ -30,6 +31,64 @@ def parse_parquet_filename(filename: str | Path) -> dict[str, int]:
         }
     else:
         raise ValueError("Parquet filename does not match expected format.", filename)
+
+
+def download_known_full(
+    download_threadpool: ThreadPoolExecutor,
+    s3_client,
+    settings: Settings,
+    file_name: os.PathLike[str],
+    progress_callback,
+) -> Path:
+    """Downloads a known full export file from S3."""
+    s3_prefix = settings.parquet_s3_prefix() + "full/"
+
+    valid_file = s3_client.list_objects_v2(
+        Bucket=settings.parquet_s3_bucket,
+        Prefix=str(Path(s3_prefix, file_name)),
+    )
+    print('valid file contents: ', valid_file)
+
+    valid_file_count = valid_file.get("KeyCount", 0)
+    print('valid file count: ', valid_file_count)
+    if valid_file_count > 1:
+        raise Exception("file_name is not a unique filename", file_name, valid_file)
+    elif valid_file_count == 0:
+        raise FileNotFoundError(
+            "File not found in S3 bucket",
+            file_name,
+            settings.parquet_s3_bucket,
+        )
+
+    file_size: int = valid_file.get("Contents", [{}])[0].get("Size", 0)
+    full_file_key: str = valid_file.get("Contents", [{}])[0].get("Key", "")
+
+    if file_size == 0:
+        raise ValueError("File `Size` is 0 bytes", valid_file)
+
+    local_file_path = os.path.join(
+        settings.target_dir(),
+        file_name,
+    )
+
+    if os.path.exists(local_file_path):
+        LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
+        return Path(local_file_path)
+
+    incoming_path = settings.incoming_dir() / file_name
+
+    resumable_download(
+        s3_client,
+        full_file_key,
+        incoming_path,
+        local_file_path,
+        progress_callback,
+        file_size,  # get size after verifying the shape of return
+        settings,
+        download_threadpool,
+    )
+
+    return Path(local_file_path)
 
 
 def download_latest_full(
@@ -83,7 +142,7 @@ def download_latest_full(
 
     if os.path.exists(local_file_path):
         LOGGER.debug("%s already exists locally. Skipping download.", local_file_path)
-        return local_file_path
+        return Path(local_file_path)
 
     incoming_path = settings.incoming_dir() / full_name
 
@@ -98,7 +157,7 @@ def download_latest_full(
         download_threadpool,
     )
 
-    return local_file_path
+    return Path(local_file_path)
 
 
 def download_incremental(

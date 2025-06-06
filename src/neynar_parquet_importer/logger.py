@@ -83,9 +83,9 @@ class CustomRichHandler(RichHandler):
 
 
 def setup_logging(level: str, log_format: str):
-    level = getattr(logging, level.upper(), None)
+    level_value = getattr(logging, level.upper(), None)
 
-    assert level is not None, f"Invalid log level: {level}"
+    assert level_value is not None, f"Invalid log level: {level}"
 
     if log_format == "json":
         format = "%(message)s"
@@ -104,7 +104,7 @@ def setup_logging(level: str, log_format: str):
         force=True,
         format=format,
         handlers=[logHandler],
-        level=level,
+        level=level_value,
     )
 
     logging.getLogger("asyncio").setLevel(logging.WARNING)
