@@ -16,7 +16,7 @@ from rich.progress import (
 )
 from ipdb import launch_ipdb_on_exception
 
-from neynar_parquet_importer.db import get_tables, import_parquet, init_db
+from neynar_parquet_importer.db import get_tables, import_parquet, init_db, mark_completed
 from neynar_parquet_importer.progress import ProgressCallback
 from neynar_parquet_importer.s3 import parse_parquet_filename, download_known_full, get_s3_client
 from neynar_parquet_importer.settings import SHUTDOWN_EVENT, CuMode, Settings
@@ -131,6 +131,7 @@ def main(
                 backfill_end_timestamp=datetime.fromtimestamp(end_timestamp),
             )
 
+            mark_completed(db_engine, parquet_import_tracking, full_filename)
             logging.info("", extra={"x": x})
 
             # TODO: how should we handle "mark completed?"
