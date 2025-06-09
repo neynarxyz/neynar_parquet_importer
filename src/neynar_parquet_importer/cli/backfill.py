@@ -131,7 +131,7 @@ def main(
                 backfill_end_timestamp=datetime.fromtimestamp(end_timestamp),
             )
 
-            mark_completed(db_engine, parquet_import_tracking, full_filename)
+            mark_completed(db_engine, parquet_import_tracking, [full_filename])
             logging.info("", extra={"x": x})
 
             # TODO: how should we handle "mark completed?"
