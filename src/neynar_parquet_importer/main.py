@@ -69,9 +69,9 @@ ALL_TABLES = {
     ("public-postgres", "nindexer"): {
         "casts": {},
         "reactions": {},
-        # "follow_counts": {},  # NOTE: this table costs extra. Talk to us if you need it
+        # "follow_counts": {},
         "follows": {},
-        # "neynar_user_scores": {},  # NOTE: this table costs extra. Talk to us if you need it
+        "neynar_user_scores": {},
         "profiles": {},
         "usernames": {},
         "verifications": {},
