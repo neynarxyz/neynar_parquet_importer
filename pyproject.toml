@@ -1,6 +1,6 @@
 [project]
 name = "neynar-parquet-importer"
-version = "0.3.1"
+version = "0.3.2"
 description = "Import Neynar's parquet files into a Postgres database"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -54,4 +54,6 @@ build-backend = "hatchling.build"
 dev-dependencies = [
     "pytest>=8.3.5",
     "ruff>=0.6.2",
+    "tomli>=2.0.1",
+    "build>=1.1.1",
 ]
