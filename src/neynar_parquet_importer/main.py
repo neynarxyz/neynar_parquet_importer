@@ -749,12 +749,18 @@ def main(settings: Settings):
         finally:
             start_shutdown()
 
+            LOGGER.info("waiting for all table_executors to complete")
+
             if table_executor is not None:
                 table_executor.shutdown(wait=False, cancel_futures=True)
+
+            LOGGER.info("waiting for all downloads to complete")
 
             if file_executor is not None:
                 for file_executor in file_executors.values():
                     file_executor.shutdown(wait=False, cancel_futures=True)
+
+            LOGGER.info("waiting for all row_group_executors to complete")
 
             if row_group_executors is not None:
                 for executor in row_group_executors.values():
