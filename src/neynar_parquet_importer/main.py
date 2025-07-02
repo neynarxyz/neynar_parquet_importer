@@ -75,6 +75,7 @@ ALL_TABLES = {
         "profiles": {},
         "usernames": {},
         "verifications": {},
+        "tier_purchases": {},
     },
 }
 
