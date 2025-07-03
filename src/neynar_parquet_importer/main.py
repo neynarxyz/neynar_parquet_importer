@@ -528,9 +528,7 @@ def queue_hard_shutdown():
     for _ in range(10):
         if len(threading.enumerate()) == 2:
             LOGGER.info("no threads left. shutting down cleanly")
-            # TODO: this is a hack. need to investiate why this final thread isn't exiting
-            # from main after returning
-            os.kill(0, signal.SIGKILL)
+            return
 
         time.sleep(1)
 
