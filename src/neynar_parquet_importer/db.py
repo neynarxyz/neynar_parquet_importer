@@ -72,7 +72,7 @@ def init_db(uri, parquet_tables, settings: Settings):
             # TODO: make this a setting
             echo=False,
             connect_args={
-                "connect_timeout": 30,
+                "connect_timeout": settings.postgres_connection_timeout,
                 # # TODO: this works on some servers, but others don't have permissions
                 # "options": f"-c statement_timeout={statement_timeout}",
             },

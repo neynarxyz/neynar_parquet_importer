@@ -528,6 +528,10 @@ def queue_hard_shutdown():
     for _ in range(10):
         if len(threading.enumerate()) == 2:
             LOGGER.info("no threads left. shutting down cleanly")
+            for thread in threading.enumerate():
+                LOGGER.warning(
+                    f"Thread {thread.name} (ID: {thread.ident}):\n{traceback.format_stack()}"
+                )
             return
 
         time.sleep(1)
@@ -765,6 +769,8 @@ def main(settings: Settings):
             if row_group_executors is not None:
                 for executor in row_group_executors.values():
                     executor.shutdown(wait=False, cancel_futures=True)
+
+            LOGGER.info("all executors should be shutting down")
 
 
 if __name__ == "__main__":

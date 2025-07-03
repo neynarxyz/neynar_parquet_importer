@@ -61,6 +61,7 @@ class Settings(BaseSettings):
         "postgresql+psycopg://postgres:postgres@localhost:15432/example_neynar_parquet_importer"
     )
     postgres_max_overflow: int = 10
+    postgres_connection_timeout: int = 30
     postgres_pool_size: int = 90
     postgres_poolclass: str = "QueuePool"
     postgres_schema: str = "public"
