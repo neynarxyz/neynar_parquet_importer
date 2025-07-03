@@ -51,6 +51,20 @@ JSON_COLUMNS = [
 ]
 
 
+def sleep_or_raise_shutdown(t):
+    if SHUTDOWN_EVENT.wait(t):
+        raise ShuttingDown("shutting down instead of sleeping")
+
+
+@retry(
+    stop=stop_after_attempt(10), # TODO: make this a setting
+    wait=wait_exponential_jitter(initial=0.4, max=10),
+    sleep=sleep_or_raise_shutdown,
+    # before=before_log(LOGGER, logging.DEBUG),
+    after=after_log(LOGGER, logging.WARN),
+    before_sleep=before_sleep_log(LOGGER, logging.WARN),
+    reraise=True,
+)
 def init_db(uri, parquet_tables, settings: Settings):
     """Initialize the database with our simple schema."""
     # TODO: option to set `statement_timeout = 1000 * 30`  # 30 seconds
@@ -627,10 +641,6 @@ def mark_completed(db_engine, parquet_import_tracking, completed_filenames):
     return execute_with_retry(db_engine, stmt)
 
 
-def sleep_or_raise_shutdown(t):
-    if SHUTDOWN_EVENT.wait(t):
-        raise ShuttingDown("shutting down instead of sleeping")
-
 
 def our_after_log(retry_state):
     """
@@ -651,7 +661,6 @@ def our_after_log(retry_state):
     del caller
 
 
-# TODO: refactor this to log the caller's location!
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential_jitter(initial=0.4, max=10),
@@ -674,7 +683,6 @@ def execute_with_retry(engine, stmt):
         return result
 
 
-# TODO: refactor this to log the caller's location!
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential_jitter(initial=0.4, max=10),
