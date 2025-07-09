@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     local_input_dir: Path = Path("./data/parquet")
     local_input_only: bool = False  # useful for development
     log_format: str = "json"
-    log_level: str = "DEBUG"
+    log_level: str = "INFO"
     neynar_api_key: str | None = None
     neynar_api_url: str = "https://api.neynar.com"
     npe_version: str = "v2"
