@@ -68,6 +68,9 @@ ALL_TABLES = {
     # for these, set `npe_version=v3` `parquet_s3_schema=nindexer` `incremental_duration=1`
     ("public-postgres", "nindexer"): {
         "casts": {},
+        "channels": {},
+        "channel_follows": {},
+        "channel_members": {},
         "fids": {},
         "reactions": {},
         "follow_counts": {},
