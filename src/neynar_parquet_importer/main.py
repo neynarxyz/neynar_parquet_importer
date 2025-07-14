@@ -76,6 +76,7 @@ ALL_TABLES = {
         "follow_counts": {},
         "follows": {},
         "neynar_user_scores": {},
+        "profile_external_accounts": {},
         "profiles": {},
         "signers": {},
         "storage_rentals": {},
