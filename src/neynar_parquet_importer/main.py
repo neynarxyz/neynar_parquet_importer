@@ -576,6 +576,32 @@ def main(settings: Settings):
 
             LOGGER.info("Tables: %s", ",".join(table_names))
 
+            # TODO: Make this configurable via the import manager API
+            pool_size_needed = settings.row_workers * len(
+                table_names
+            ) + settings.file_workers * len(table_names)
+
+            if pool_size_needed > settings.postgres_pool_size:
+                LOGGER.warning(
+                    "postgres_pool_size is too small! auto-increasing it",
+                    extra={
+                        "db_available": settings.postgres_pool_size,
+                        "db_needed": pool_size_needed,
+                        "row": settings.row_workers,
+                        "file": settings.file_workers,
+                    },
+                )
+                settings.postgres_pool_size = pool_size_needed
+            else:
+                LOGGER.info(
+                    "workers",
+                    extra={
+                        "db_available": settings.postgres_pool_size,
+                        "db_needed": pool_size_needed,
+                        "row": settings.row_workers,
+                        "file": settings.file_workers,
+                    },
+                )
             db_engine = init_db(str(settings.postgres_dsn), table_names, settings)
 
             tables = get_tables(settings.postgres_schema, db_engine, table_names)
@@ -685,31 +711,6 @@ def main(settings: Settings):
             )
 
             f_shutdown = shutdown_executor.submit(SHUTDOWN_EVENT.wait)
-
-            pool_size_needed = settings.row_workers * len(
-                row_group_executors
-            ) + settings.file_workers * len(file_executors)
-
-            if pool_size_needed > settings.postgres_pool_size:
-                LOGGER.error(
-                    "postgres_pool_size is too small! high paralellism may crash the app!",
-                    extra={
-                        "db_available": settings.postgres_pool_size,
-                        "db_needed": pool_size_needed,
-                        "row": settings.row_workers,
-                        "file": settings.file_workers,
-                    },
-                )
-            else:
-                LOGGER.info(
-                    "workers",
-                    extra={
-                        "db_available": settings.postgres_pool_size,
-                        "db_needed": pool_size_needed,
-                        "row": settings.row_workers,
-                        "file": settings.file_workers,
-                    },
-                )
 
             filter_file = settings.filter_file
             if filter_file:
