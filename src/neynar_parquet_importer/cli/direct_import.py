@@ -91,6 +91,8 @@ def main(parquet_file: Path, settings: Settings):
                 row_filters,
                 settings,
                 f_shutdown,
+                backfill_start_timestamp=None,
+                backfill_end_timestamp=None,
             )
 
             logging.info("", extra={"x": x})
