@@ -71,12 +71,6 @@ class Neo4jBackend(DatabaseBackend):
         if not self.driver or not self.query_builder:
             raise RuntimeError("Neo4j backend not initialized")
         
-        # Check memory usage before processing (non-blocking)
-        memory_check = self.unified_performance.check_memory_pressure()
-        if memory_check['should_pause']:
-            self.logger.warning("High memory usage detected, consider reducing batch size")
-            # Note: Removed gc.collect() to avoid blocking all threads during import
-        
         try:
             with self.unified_performance.batch_timer():
                 # Check memory pressure before processing
@@ -240,12 +234,6 @@ class Neo4jBackend(DatabaseBackend):
         try:
             # Stop performance monitoring and log summary
             # Note: unified_performance provides more detailed summary than old performance_monitor
-            metrics = self.unified_performance.get_current_metrics()
-            self.logger.info(f"Neo4j Performance Summary: {metrics.operations_count} ops, "
-                           f"{metrics.operations_per_second:.2f} ops/sec, "
-                           f"peak memory: {metrics.peak_memory_mb:.2f}MB")
-            
-            # Log performance summary
             metrics = self.unified_performance.get_current_metrics()
             self.logger.info(f"Neo4j Performance Summary: {metrics.operations_count} ops, "
                            f"{metrics.operations_per_second:.2f} ops/sec, "

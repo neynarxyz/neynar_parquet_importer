@@ -13,6 +13,11 @@ from typing import Dict, List, Optional, Any, Union
 from contextlib import contextmanager
 from enum import Enum
 
+# Import for type annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..settings import Settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -212,7 +217,7 @@ class UnifiedPerformanceManager:
             logger.info(f"  Errors: {self.metrics.errors_count}")
 
 
-def create_performance_manager(backend_type: str, settings=None) -> UnifiedPerformanceManager:
+def create_performance_manager(backend_type: str, settings: Optional['Settings'] = None) -> UnifiedPerformanceManager:
     """Factory function to create appropriate performance manager"""
     
     # Determine monitoring level based on backend and settings

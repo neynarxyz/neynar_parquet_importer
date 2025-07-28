@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     # Neo4j specific settings (only used when database_backend=neo4j)
     neo4j_uri: str = "neo4j://localhost:7687"
     neo4j_user: str = "neo4j"
-    neo4j_password: str = "password"
+    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "CHANGE_ME")
     neo4j_database: str = "neo4j"
     neo4j_max_connections: int = 10  # Max concurrent Neo4j connections
     batch_size_neo4j: int = 1000
