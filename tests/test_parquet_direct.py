@@ -31,7 +31,6 @@ from neynar_parquet_importer.db import get_tables, import_parquet, init_db
 from neynar_parquet_importer.progress import ProgressCallback
 from neynar_parquet_importer.s3 import parse_parquet_filename
 from neynar_parquet_importer.settings import SHUTDOWN_EVENT
-from neynar_parquet_importer.context import set_global_settings
 
 
 def create_test_settings(database_backend: str = "postgresql") -> Settings:
@@ -77,8 +76,6 @@ def create_test_settings(database_backend: str = "postgresql") -> Settings:
 
 def process_parquet_file(parquet_file: Path, settings: Settings):
     """Process a single parquet file using the direct import logic"""
-    # Initialize global settings
-    set_global_settings(settings)
     
     with ExitStack() as stack:
         try:

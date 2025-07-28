@@ -28,10 +28,6 @@ def main(
     start_timestamp: int,
     end_timestamp: int,
 ):
-    # Initialize global application settings  
-    from neynar_parquet_importer.context import set_global_settings
-    set_global_settings(settings)
-    
     with ExitStack() as stack:
         shutdown_executor = row_group_executor = None
         try:

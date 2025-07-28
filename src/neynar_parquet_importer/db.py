@@ -510,6 +510,7 @@ def import_parquet(
             filtered_row_cu_cost,
             backfill_start_timestamp,
             backfill_end_timestamp,
+            settings,
         )
 
         fs.append(f)
@@ -727,11 +728,8 @@ def process_batch(
     filtered_row_cu_cost: int,
     backfill_start_timestamp: int | None,
     backfill_end_timestamp: int | None,
+    settings,
 ):
-    # Get global settings to determine processing path
-    from .context import get_global_settings
-    settings = get_global_settings()
-    
     LOGGER.info(f"🔀 process_batch: settings = {settings.database_backend if settings else 'None'}")
     
     # ZERO-COST PATH: If PostgreSQL or no settings, use existing logic directly
