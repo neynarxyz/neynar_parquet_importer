@@ -9,14 +9,19 @@ class PostgreSQLBackend(DatabaseBackend):
         self.engine = None
     
     def init_db(self, uri: str, tables: List[str], settings: 'Settings') -> Any:
-        """Initialize database connection and apply schema migrations"""
+        """Initialize database connection and apply schema migrations
+        
+        DELEGATION PATTERN: This wrapper delegates to the legacy db.init_db() to preserve
+        backwards compatibility and avoid refactoring battle-tested PostgreSQL logic.
+        Enables zero-cost abstraction - new backends get clean interfaces, PostgreSQL keeps optimizations.
+        """
         # Import here to avoid circular imports
         from .. import db
         
         # Convert uri to string if it's a PostgresDsn object
         uri_str = str(uri) if hasattr(uri, '__str__') else uri
         
-        # Use existing database initialization logic
+        # Delegate to existing battle-tested PostgreSQL initialization logic
         self.engine = db.init_db(uri_str, tables, settings)
         return self.engine
     
