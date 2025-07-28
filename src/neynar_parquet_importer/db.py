@@ -736,22 +736,43 @@ def process_batch(
     if settings is None or settings.database_backend == "postgresql":
         LOGGER.info("📊 Taking PostgreSQL path (original processing)")
         return _process_batch_postgres(
-            dd_tags, engine, i, npe_version, parquet_file, 
-            parsed_filename, primary_key_columns, progress_callback,
-            row_filters, table, cu_metric, row_cu_cost, 
-            filtered_row_cu_cost, backfill_start_timestamp, 
-            backfill_end_timestamp
+            dd_tags,
+            engine,
+            i,
+            npe_version,
+            parquet_file,
+            parsed_filename,
+            primary_key_columns,
+            progress_callback,
+            row_filters,
+            table,
+            cu_metric,
+            row_cu_cost,
+            filtered_row_cu_cost,
+            backfill_start_timestamp,
+            backfill_end_timestamp,
         )
     
     # NEW PATH: Only for non-PostgreSQL backends
     else:
         LOGGER.info(f"🚀 Taking {settings.database_backend} path (transformation processing)")
         return _process_batch_with_transformation(
-            dd_tags, engine, i, npe_version, parquet_file, 
-            parsed_filename, primary_key_columns, progress_callback,
-            row_filters, table, cu_metric, row_cu_cost, 
-            filtered_row_cu_cost, backfill_start_timestamp, 
-            backfill_end_timestamp, settings
+            dd_tags,
+            engine,
+            i,
+            npe_version,
+            parquet_file,
+            parsed_filename,
+            primary_key_columns,
+            progress_callback,
+            row_filters,
+            table,
+            cu_metric,
+            row_cu_cost,
+            filtered_row_cu_cost,
+            backfill_start_timestamp,
+            backfill_end_timestamp,
+            settings,
         )
 
 
@@ -772,7 +793,6 @@ def _process_batch_postgres(
     backfill_start_timestamp: int | None,
     backfill_end_timestamp: int | None,
 ):
-    """Existing process_batch logic moved here unchanged"""
     # This is too verbose
     # LOGGER.debug("starting batch #%s", i)
 
