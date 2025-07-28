@@ -563,6 +563,10 @@ def start_shutdown():
 
 
 def main(settings: Settings):
+    # Initialize global application settings
+    from .context import set_global_settings
+    set_global_settings(settings)
+    
     with ExitStack() as stack:
         db_engine = table_executor = file_executor = row_group_executors = None
         try:

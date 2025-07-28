@@ -728,6 +728,53 @@ def process_batch(
     backfill_start_timestamp: int | None,
     backfill_end_timestamp: int | None,
 ):
+    # Get global settings to determine processing path
+    from .context import get_global_settings
+    settings = get_global_settings()
+    
+    LOGGER.info(f"🔀 process_batch: settings = {settings.database_backend if settings else 'None'}")
+    
+    # ZERO-COST PATH: If PostgreSQL or no settings, use existing logic directly
+    if settings is None or settings.database_backend == "postgresql":
+        LOGGER.info("📊 Taking PostgreSQL path (original processing)")
+        return _process_batch_original(
+            dd_tags, engine, i, npe_version, parquet_file, 
+            parsed_filename, primary_key_columns, progress_callback,
+            row_filters, table, cu_metric, row_cu_cost, 
+            filtered_row_cu_cost, backfill_start_timestamp, 
+            backfill_end_timestamp
+        )
+    
+    # NEW PATH: Only for non-PostgreSQL backends
+    else:
+        LOGGER.info(f"🚀 Taking {settings.database_backend} path (transformation processing)")
+        return _process_batch_with_transformation(
+            dd_tags, engine, i, npe_version, parquet_file, 
+            parsed_filename, primary_key_columns, progress_callback,
+            row_filters, table, cu_metric, row_cu_cost, 
+            filtered_row_cu_cost, backfill_start_timestamp, 
+            backfill_end_timestamp, settings
+        )
+
+
+def _process_batch_original(
+    dd_tags,
+    engine,
+    i,
+    npe_version,
+    parquet_file,
+    parsed_filename,
+    primary_key_columns,
+    progress_callback,
+    row_filters,
+    table,
+    cu_metric: str | None,
+    row_cu_cost: int,
+    filtered_row_cu_cost: int,
+    backfill_start_timestamp: int | None,
+    backfill_end_timestamp: int | None,
+):
+    """Existing process_batch logic moved here unchanged"""
     # This is too verbose
     # LOGGER.debug("starting batch #%s", i)
 
@@ -877,4 +924,113 @@ def process_batch(
 
     # TODO: better return type for this so we don't mix up values
     # TODO: include the cu cost and filtered rows in this?
+    return (i, file_age_s, row_age_s, last_updated_at)
+
+
+def _process_batch_with_transformation(
+    dd_tags,
+    engine,
+    i,
+    npe_version,
+    parquet_file,
+    parsed_filename,
+    primary_key_columns,
+    progress_callback,
+    row_filters,
+    table,
+    cu_metric: str | None,
+    row_cu_cost: int,
+    filtered_row_cu_cost: int,
+    backfill_start_timestamp: int | None,
+    backfill_end_timestamp: int | None,
+    settings: Settings,
+):
+    """New transformation-based processing for graph databases"""
+    from .database.factory import DatabaseFactory
+    from time import time
+    from datetime import UTC, datetime
+    
+    LOGGER.info(f"🔄 Processing batch {i} with transformation (table: {table.name})")
+    
+    # Get backend and transformer
+    LOGGER.info("🏗️  Creating backend and transformer...")
+    backend = DatabaseFactory.create_backend(settings)
+    transformer = DatabaseFactory.create_transformer(settings)
+    LOGGER.info(f"   Backend: {type(backend).__name__}")
+    LOGGER.info(f"   Transformer: {type(transformer).__name__}")
+    
+    # Initialize the backend with connection parameters
+    LOGGER.info("🔌 Initializing backend connection...")
+    backend.init_db(None, [table.name], settings)  # Neo4j doesn't use the URI parameter, it uses settings
+    LOGGER.info("   Backend initialized successfully")
+    
+    # Convert PyArrow batch to rows (existing logic)
+    LOGGER.info(f"📖 Reading row group {i}...")
+    batch = parquet_file.read_row_group(i)
+    rows = batch.to_pylist()
+    LOGGER.info(f"   Read {len(rows)} rows from parquet")
+    
+    # Apply row filters (existing logic)
+    if row_filters or backfill_start_timestamp is not None or backfill_end_timestamp is not None:
+        orig_rows_len = len(rows)
+        rows = list(filter(lambda row: include_row(row, row_filters, backfill_start_timestamp, backfill_end_timestamp), rows))
+        rows_len = len(rows)
+        filtered_rows = orig_rows_len - rows_len
+        
+        # Log filtered rows
+        extra = {
+            "num_filtered": filtered_rows,
+            "rows": rows_len,
+            "table": table.name,
+        }
+        
+        if cu_metric:
+            cu_cost = orig_rows_len * filtered_row_cu_cost
+            extra["cu_cost"] = cu_cost
+            statsd.increment(cu_metric, value=cu_cost, tags=dd_tags)
+        
+        LOGGER.debug("filtered", extra=extra)
+        statsd.increment("num_parquet_rows_filtered", value=filtered_rows, tags=dd_tags)
+    else:
+        rows_len = len(rows)
+    
+    LOGGER.info(f"📊 After filtering: {rows_len} rows to process")
+    
+    # Transform rows to operations
+    LOGGER.info("🔄 Transforming rows to operations...")
+    operations = transformer.transform_table(table.name, rows)
+    LOGGER.info(f"   Created {len(operations)} operations")
+    
+    # Execute via backend
+    LOGGER.info("💾 Executing operations via backend...")
+    backend.import_operations(operations)
+    LOGGER.info("   Operations executed successfully")
+    
+    # Calculate metrics (similar to original)
+    now = time()
+    file_age_s = now - parsed_filename["end_timestamp"]
+    
+    if rows:
+        # Try to get updated_at from the last row, fallback to timestamp
+        last_row = rows[-1]
+        if "updated_at" in last_row and last_row["updated_at"]:
+            last_updated_at = last_row["updated_at"]
+        else:
+            last_updated_at = datetime.fromtimestamp(parsed_filename["end_timestamp"], UTC)
+    else:
+        last_updated_at = datetime.fromtimestamp(parsed_filename["end_timestamp"], UTC)
+    
+    row_age_s = now - last_updated_at.timestamp()
+    
+    # Record metrics
+    statsd.gauge("parquet_file_age_s", file_age_s, tags=dd_tags)
+    statsd.gauge("parquet_row_age_s", row_age_s, tags=dd_tags)
+    statsd.increment("num_parquet_rows_imported", value=rows_len, tags=dd_tags)
+    
+    if cu_metric and row_cu_cost > 0:
+        cu_cost = rows_len * row_cu_cost
+        statsd.increment(cu_metric, value=cu_cost, tags=dd_tags)
+    
+    progress_callback(1)
+    
     return (i, file_age_s, row_age_s, last_updated_at)

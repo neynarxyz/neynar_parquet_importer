@@ -2,6 +2,16 @@
 /.venv/
 /data/
 /docker-compose.*.yml
+!/docker-compose.test.yml
 /src/*.egg-info/
 
 __pycache__/
+
+# macOS metadata files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

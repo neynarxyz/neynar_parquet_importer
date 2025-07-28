@@ -18,6 +18,10 @@ from neynar_parquet_importer.settings import SHUTDOWN_EVENT, Settings
 
 
 def main(parquet_file: Path, settings: Settings):
+    # Initialize global application settings
+    from neynar_parquet_importer.context import set_global_settings
+    set_global_settings(settings)
+    
     # TODO: how can we load a single file? how should we handle the tracking table?
 
     with ExitStack() as stack:
