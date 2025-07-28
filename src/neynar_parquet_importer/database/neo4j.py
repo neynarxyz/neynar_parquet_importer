@@ -37,7 +37,6 @@ class Neo4jBackend(DatabaseBackend):
             
             # Test connection
             self.driver.verify_connectivity()
-            self.logger.info(f"Connected to Neo4j at {settings.neo4j_uri}")
             
             # Initialize schema management
             from .neo4j_schema import Neo4jSchemaManager
@@ -77,7 +76,6 @@ class Neo4jBackend(DatabaseBackend):
                 memory_check = self.unified_performance.check_memory_pressure()
                 if memory_check['should_pause']:
                     gc.collect()
-                    self.logger.warning("Memory pressure detected, triggered garbage collection")
                 
                 # Group operations by type for optimized processing
                 node_operations = [op for op in operations if op.operation_type == "create_node"]
@@ -87,23 +85,17 @@ class Neo4jBackend(DatabaseBackend):
                     with session.begin_transaction() as tx:
                         # Process node operations first
                         if node_operations:
-                            self.logger.info(f"🔵 Processing {len(node_operations)} node operations")
                             self._process_node_operations_optimized(tx, node_operations)
                         
                         # Process relationship operations
                         if relationship_operations:
-                            self.logger.info(f"🔗 Processing {len(relationship_operations)} relationship operations")
                             self._process_relationship_operations_optimized(tx, relationship_operations)
                         
                         # Commit transaction
-                        self.logger.info(f"💾 Committing transaction with {len(operations)} total operations")
                         tx.commit()
-                        self.logger.info(f"✅ Transaction committed successfully")
                 
                 # Record performance metrics
                 self.unified_performance.record_operations(len(operations))
-                
-                self.logger.debug(f"Successfully imported {len(operations)} operations")
                 
         except Neo4jError as e:
             self.unified_performance.record_error()
@@ -137,14 +129,7 @@ class Neo4jBackend(DatabaseBackend):
             for i in range(0, len(node_properties_list), optimal_batch_size):
                 batch = node_properties_list[i:i + optimal_batch_size]
                 query = self.query_builder.build_node_merge_query(entity_type, batch[0])
-                self.logger.info(f"🔵 Executing node query for {entity_type}: {query}")
-                self.logger.info(f"   With {len(batch)} nodes: {batch}")
-                result = tx.run(query, nodes=batch)
-                self.logger.info(f"   Query executed, summary: {result.consume().counters}")
-            
-            # Record query performance
-            execution_time = time.time() - start_time
-            self.logger.debug(f"Node creation took {execution_time:.3f}s for {len(node_properties_list)} nodes")
+                tx.run(query, nodes=batch)
     
     def _process_relationship_operations_optimized(self, tx, operations: List[ImportOperation]) -> None:
         """Process relationship creation operations with performance optimization"""
@@ -182,14 +167,7 @@ class Neo4jBackend(DatabaseBackend):
                 for i in range(0, len(rel_data_list), optimal_batch_size):
                     batch = rel_data_list[i:i + optimal_batch_size]
                     rel_properties = [item['properties'] for item in batch]
-                    self.logger.info(f"🔗 Executing relationship query for {rel_type}: {query}")
-                    self.logger.info(f"   With {len(rel_properties)} relationships: {rel_properties}")
-                    result = tx.run(query, relationships=rel_properties)
-                    self.logger.info(f"   Query executed, summary: {result.consume().counters}")
-                
-                # Record query performance
-                execution_time = time.time() - start_time
-                self.logger.debug(f"Relationship creation took {execution_time:.3f}s for {len(rel_data_list)} relationships")
+                    tx.run(query, relationships=rel_properties)
     
     def check_import_progress(self, table_name: str, file_name: str) -> Optional[int]:
         """Check last imported row group for a file"""
@@ -233,9 +211,8 @@ class Neo4jBackend(DatabaseBackend):
         """Clean up database connections and log performance summary"""
         try:
             # Stop performance monitoring and log summary
-            # Note: unified_performance provides more detailed summary than old performance_monitor
             metrics = self.unified_performance.get_current_metrics()
-            self.logger.info(f"Neo4j Performance Summary: {metrics.operations_count} ops, "
+            self.logger.debug(f"Neo4j Performance Summary: {metrics.operations_count} ops, "
                            f"{metrics.operations_per_second:.2f} ops/sec, "
                            f"peak memory: {metrics.peak_memory_mb:.2f}MB")
             
@@ -245,7 +222,6 @@ class Neo4jBackend(DatabaseBackend):
             if self.driver:
                 self.driver.close()
                 self.driver = None
-                self.logger.info("Neo4j connection closed")
                 
         except Exception as e:
             self.logger.error(f"Error during Neo4j cleanup: {e}")
