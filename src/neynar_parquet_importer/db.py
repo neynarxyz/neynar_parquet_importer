@@ -735,7 +735,7 @@ def process_batch(
     # ZERO-COST PATH: If PostgreSQL or no settings, use existing logic directly
     if settings is None or settings.database_backend == "postgresql":
         LOGGER.info("📊 Taking PostgreSQL path (original processing)")
-        return _process_batch_original(
+        return _process_batch_postgres(
             dd_tags, engine, i, npe_version, parquet_file, 
             parsed_filename, primary_key_columns, progress_callback,
             row_filters, table, cu_metric, row_cu_cost, 
@@ -755,7 +755,7 @@ def process_batch(
         )
 
 
-def _process_batch_original(
+def _process_batch_postgres(
     dd_tags,
     engine,
     i,
