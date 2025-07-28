@@ -1,0 +1,57 @@
+# Test-specific Dockerfile with all dependencies
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+
+WORKDIR /app
+
+# Enable bytecode compilation
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+ENV PYTHON_JIT=1
+
+# Install system dependencies including Neo4j requirements
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy project files
+COPY pyproject.toml uv.lock ./
+
+# Install all dependencies including dev dependencies
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project
+
+# Copy source code
+COPY . .
+
+# Install project in development mode
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen
+
+# Create test entrypoint script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "🧪 Test Environment Ready"\n\
+echo "   Python: $(python --version)"\n\
+echo "   UV: $(uv --version)"\n\
+echo "   Working Directory: $(pwd)"\n\
+echo "   Database Backend: ${DATABASE_BACKEND:-postgresql}"\n\
+echo ""\n\
+# Wait for databases to be ready\n\
+echo "⏳ Waiting for databases..."\n\
+until nc -z postgres 5432; do sleep 1; done\n\
+until nc -z neo4j 7687; do sleep 1; done\n\
+echo "✅ Databases ready!"\n\
+echo ""\n\
+# Run the command passed to the container\n\
+exec "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+# Install netcat for database health checks
+RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/lists/*
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["uv", "run", "pytest", "tests/", "-v"]
