@@ -730,11 +730,9 @@ def process_batch(
     backfill_end_timestamp: int | None,
     settings,
 ):
-    LOGGER.info(f"🔀 process_batch: settings = {settings.database_backend if settings else 'None'}")
     
     # ZERO-COST PATH: If PostgreSQL or no settings, use existing logic directly
     if settings is None or settings.database_backend == "postgresql":
-        LOGGER.info("📊 Taking PostgreSQL path (original processing)")
         return _process_batch_postgres(
             dd_tags,
             engine,
@@ -755,7 +753,6 @@ def process_batch(
     
     # NEW PATH: Only for non-PostgreSQL backends
     else:
-        LOGGER.info(f"🚀 Taking {settings.database_backend} path (transformation processing)")
         return _process_batch_with_transformation(
             dd_tags,
             engine,
@@ -968,25 +965,16 @@ def _process_batch_with_transformation(
     from time import time
     from datetime import UTC, datetime
     
-    LOGGER.info(f"🔄 Processing batch {i} with transformation (table: {table.name})")
-    
     # Get backend and transformer
-    LOGGER.info("🏗️  Creating backend and transformer...")
     backend = DatabaseFactory.create_backend(settings)
     transformer = DatabaseFactory.create_transformer(settings)
-    LOGGER.info(f"   Backend: {type(backend).__name__}")
-    LOGGER.info(f"   Transformer: {type(transformer).__name__}")
     
     # Initialize the backend with connection parameters
-    LOGGER.info("🔌 Initializing backend connection...")
     backend.init_db(None, [table.name], settings)  # Neo4j doesn't use the URI parameter, it uses settings
-    LOGGER.info("   Backend initialized successfully")
     
     # Convert PyArrow batch to rows (existing logic)
-    LOGGER.info(f"📖 Reading row group {i}...")
     batch = parquet_file.read_row_group(i)
     rows = batch.to_pylist()
-    LOGGER.info(f"   Read {len(rows)} rows from parquet")
     
     # Apply row filters (existing logic)
     if row_filters or backfill_start_timestamp is not None or backfill_end_timestamp is not None:
@@ -1012,17 +1000,11 @@ def _process_batch_with_transformation(
     else:
         rows_len = len(rows)
     
-    LOGGER.info(f"📊 After filtering: {rows_len} rows to process")
-    
     # Transform rows to operations
-    LOGGER.info("🔄 Transforming rows to operations...")
     operations = transformer.transform_table(table.name, rows)
-    LOGGER.info(f"   Created {len(operations)} operations")
     
     # Execute via backend
-    LOGGER.info("💾 Executing operations via backend...")
     backend.import_operations(operations)
-    LOGGER.info("   Operations executed successfully")
     
     # Calculate metrics (similar to original)
     now = time()
