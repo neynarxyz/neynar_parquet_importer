@@ -10,7 +10,7 @@ services:
       POSTGRES_DB: neynar_parquet_importer
     restart: unless-stopped
     ports:
-      - "35432:5432"  # Use different port for tests to avoid conflicts
+      - "25432:5432"  # Use different port for tests to avoid conflicts
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
@@ -52,7 +52,7 @@ services:
     environment:
       # Override with Docker service names and test ports
       - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=35432
+      - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=neynar_parquet_importer
@@ -65,7 +65,7 @@ services:
       - ./:/app
       - uv_cache:/tmp/uv-cache
     working_dir: /app
-    command: uv run pytest tests/test_phase*.py -v
+    # Uses default CMD from Dockerfile.test: uv run pytest tests/ -v
 
 volumes:
   neo4j_data:

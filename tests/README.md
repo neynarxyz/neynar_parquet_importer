@@ -89,7 +89,7 @@ docker-compose -f docker-compose.yml -f docker-compose.test.yml run --rm test-ru
 
 ### PostgreSQL (Docker)
 - Host: postgres (Docker service name)
-- Port: 5432 (internal Docker port, exposed on both 5432 and 35432 for compatibility)
+- Port: 5432 (internal Docker port, exposed on both 5432 and 25432 for compatibility)
 - User: postgres
 - Password: postgres
 - Database: neynar_parquet_importer

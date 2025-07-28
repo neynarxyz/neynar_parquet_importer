@@ -16,7 +16,7 @@ help:
 	@echo "  down         - Stop all services"
 
 # Docker Compose files
-DOCKER_COMPOSE = docker-compose -f docker-compose.yml -f docker-compose.test.yml
+DOCKER_COMPOSE = docker-compose -f docker-compose.test.yml
 
 # Build all images
 build:
@@ -30,7 +30,7 @@ dev-env:
 	@echo "⏳ Waiting for databases to be ready..."
 	@sleep 10
 	@echo "✅ Development environment ready!"
-	@echo "   PostgreSQL: localhost:35432"
+	@echo "   PostgreSQL: localhost:25432"
 	@echo "   Neo4j Browser: http://localhost:37474"
 	@echo "   Neo4j Bolt: neo4j://localhost:37687"
 
