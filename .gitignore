@@ -1,4 +1,5 @@
 /.env*
+!/.env.test
 /.venv/
 /data/
 /docker-compose.*.yml

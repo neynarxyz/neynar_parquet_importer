@@ -54,6 +54,15 @@ Upgrade dependencies ([OfficialDocs](https://docs.astral.sh/uv/concepts/projects
 
     uv lock --upgrade
 
+## Testing
+
+Run tests using the Makefile:
+
+    make test           # PostgreSQL backend
+    make test-neo4j     # Neo4j backend
+    make validate       # Quick validation
+
+For detailed testing documentation, see [`tests/README.md`](tests/README.md).
 
 ## Notes and Todo
 
