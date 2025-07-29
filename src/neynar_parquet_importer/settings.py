@@ -69,6 +69,23 @@ class Settings(BaseSettings):
     skip_full_import: bool = False
     s3_pool_size: int = 100
     target_name: str = "unknown"
+    
+    # Database backend selection (NEW)
+    database_backend: str = "postgresql"  # postgresql or neo4j
+    
+    # Performance monitoring configuration (unified across backends)
+    performance_monitoring_level: str = "auto"  # auto, disabled, minimal, standard, detailed
+    memory_check_frequency: int = 10  # Check memory every N batches (reduces overhead)
+    memory_cache_duration: float = 5.0  # Cache memory readings for N seconds
+    
+    # Neo4j specific settings (only used when database_backend=neo4j)
+    neo4j_uri: str = "neo4j://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "CHANGE_ME")
+    neo4j_database: str = "neo4j"
+    neo4j_max_connections: int = 10  # Max concurrent Neo4j connections
+    batch_size_neo4j: int = 1000
+    transform_chunk_size: int = 100  # Chunk size for memory-efficient transformations
 
     model_config = SettingsConfigDict(
         env_file=os.environ.get("ENV_FILE", ".env"),

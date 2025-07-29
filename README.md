@@ -1,6 +1,6 @@
 # Example Neynar Parquet Importer
 
-Download parquet exports from [Neynar](https://neynar.com) and import them into a Postgres database.
+Download parquet exports from [Neynar](https://neynar.com) and import them into a **PostgreSQL** or **Neo4j** database.
 
 Credentials for downloading the parquet files are currently handed out manually. Reach out to us if you'd like to try it out!
 
@@ -54,6 +54,15 @@ Upgrade dependencies ([OfficialDocs](https://docs.astral.sh/uv/concepts/projects
 
     uv lock --upgrade
 
+## Testing
+
+Run tests using the Makefile:
+
+    make test           # PostgreSQL backend
+    make test-neo4j     # Neo4j backend
+    make validate       # Quick validation
+
+For detailed testing documentation, see [`tests/README.md`](tests/README.md).
 
 ## Notes and Todo
 

@@ -19,11 +19,13 @@ dependencies = [
     "markdown-it-py",
     "matplotlib-inline",
     "mdurl",
+    "neo4j>=5.15.0",
     "numpy",
     "orjson>=3.10.15",
     "parso",
     "pexpect",
     "prompt-toolkit",
+    "psutil>=5.9.0",
     "psycopg>=3.2.3",
     "ptyprocess",
     "pure-eval",
@@ -57,3 +59,16 @@ dev-dependencies = [
     "tomli>=2.0.1",
     "build>=1.1.1",
 ]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "COM", # flake8-commas
+]
+
+[tool.ruff.lint.flake8-commas]
+force-trailing-comma = true
