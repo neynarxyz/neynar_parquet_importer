@@ -10,6 +10,7 @@ help:
 	@echo "  validate     - Quick validation of core components"
 	@echo "  dev-env      - Start development environment (PostgreSQL + Neo4j)"
 	@echo "  setup-neo4j  - Initialize Neo4j with test data"
+	@echo "  populate-neo4j-data - Import real parquet files into Neo4j"
 	@echo "  validate-neo4j-data - Validate Neo4j data directly"
 	@echo "  logs         - Show logs from running containers"
 	@echo "  clean        - Stop and remove all containers and volumes"
@@ -52,6 +53,12 @@ settings = Settings(database_backend='neo4j', neo4j_uri='neo4j://neo4j:7687'); \
 backend = Neo4jBackend(); \
 backend.init_db('neo4j://neo4j:7687', ['fids', 'follows'], settings); \
 print('✅ Neo4j initialized successfully')"
+
+# Populate Neo4j with real parquet data  
+populate-neo4j-data: dev-env
+	@echo "📥 Populating Neo4j with real parquet data..."
+	$(DOCKER_COMPOSE) run --rm -e DATABASE_BACKEND=neo4j test-runner uv run pytest tests/test_parquet_direct.py::test_neo4j_data_verification -v
+	@echo "✅ Neo4j populated with real data!"
 
 # Validate Neo4j data directly
 validate-neo4j-data: dev-env
