@@ -26,9 +26,7 @@ build:
 # Start development environment
 dev-env:
 	@echo "🚀 Starting development environment..."
-	$(DOCKER_COMPOSE) up -d postgres neo4j
-	@echo "⏳ Waiting for databases to be ready..."
-	@sleep 10
+	$(DOCKER_COMPOSE) up --detach --wait postgres neo4j
 	@echo "✅ Development environment ready!"
 	@echo "   PostgreSQL: localhost:25432"
 	@echo "   Neo4j Browser: http://localhost:37474"
