@@ -1,6 +1,4 @@
 # Docker Compose for Testing with Neo4j
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16
