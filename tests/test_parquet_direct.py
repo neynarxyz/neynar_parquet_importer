@@ -374,7 +374,9 @@ def test_neo4j_backend(test_parquet_files):
 
 
 def test_neo4j_data_verification():
-    """Verify that Neo4j backend creates actual nodes and relationships"""
+    """Verify that Neo4j backend creates actual nodes and relationships
+        TODO: This test should tightly integrate the full neo4j db lifecycle 
+    """
     import neo4j
     from sqlalchemy import text
     
