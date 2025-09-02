@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     views: str = ""
 
     app_uuid: str | None = None
+    pipeline_id: str | None = None
     cu_mode: CuMode = CuMode.OFF
     datadog_enabled: bool = True
     download_workers: int = 32
@@ -142,6 +143,9 @@ class Settings(BaseSettings):
 
         if self.app_uuid:
             statsd_constant_tags.append(f"app_uuid:{self.app_uuid}")
+
+        if self.pipeline_id:
+            statsd_constant_tags.append(f"pipeline_id:{self.pipeline_id}")
 
         datadog.initialize(
             hostname_from_config=False,
