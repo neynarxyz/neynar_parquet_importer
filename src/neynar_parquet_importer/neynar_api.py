@@ -1,5 +1,6 @@
 from functools import cache
 from cachetools import TTLCache, cachedmethod
+from datetime import timedelta, datetime
 import requests
 
 
@@ -15,7 +16,7 @@ class NeynarApiClient:
     def __init__(self, api_key: str | None, api_url: str):
         self.api_url = api_url.rstrip("/")
 
-        self.cache = TTLCache(maxsize=1, ttl=60)
+        self.cache = TTLCache(maxsize=1, ttl=timedelta(hours=8), timer=datetime.now)
 
         self.session = requests.Session()
 
