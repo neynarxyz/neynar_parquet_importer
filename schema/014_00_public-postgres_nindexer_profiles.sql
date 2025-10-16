@@ -53,6 +53,17 @@ BEGIN
         ADD COLUMN banner_url text;
     END IF;
 
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'profiles'
+        AND table_schema = '${POSTGRES_SCHEMA}'
+        AND column_name = 'token_uri'
+    ) THEN
+        ALTER TABLE ${POSTGRES_SCHEMA}.profiles
+        ADD COLUMN token_uri text;
+    END IF;
+
     -- Create the index if the table is empty
     IF NOT EXISTS (SELECT 1 FROM ${POSTGRES_SCHEMA}.profiles LIMIT 1) THEN
         CREATE INDEX IF NOT EXISTS idx_profiles_upsert
