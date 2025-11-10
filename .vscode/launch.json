@@ -16,6 +16,17 @@
                 "START_TIMESTAMP": "1735732800",
                 "TABLES": "verifications",
             }
+        },
+        {
+            "name": "Python Debugger: main",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "neynar_parquet_importer.main",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "TABLES": "verifications"
+            }
         }
     ]
 }

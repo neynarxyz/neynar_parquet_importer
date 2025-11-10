@@ -18,8 +18,20 @@ BEGIN
         CREATE INDEX IF NOT EXISTS idx_verifications_upsert
         ON ${POSTGRES_SCHEMA}.verifications (id, updated_at);
     END IF;
+
+    IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'verifications'
+    AND table_schema = '${POSTGRES_SCHEMA}'
+    AND column_name = 'app_fid'
+    ) THEN
+        ALTER TABLE ${POSTGRES_SCHEMA}.verifications
+        ADD COLUMN app_fid bigint;
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS verifications_address ON ${POSTGRES_SCHEMA}.verifications ("address");
 CREATE INDEX IF NOT EXISTS verifications_fid ON ${POSTGRES_SCHEMA}.verifications (fid);
 CREATE INDEX IF NOT EXISTS verifications_timestamp_not_deleted ON ${POSTGRES_SCHEMA}.verifications ("timestamp") WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS verifications_app_fid ON ${POSTGRES_SCHEMA}.verifications (app_fid);
