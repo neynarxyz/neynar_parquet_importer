@@ -4,6 +4,8 @@ Download parquet exports from [Neynar](https://neynar.com) and import them into 
 
 Credentials for downloading the parquet files are currently handed out manually. Reach out to us if you'd like to try it out!
 
+See [docs/schemas.md](docs/schemas.md) for a list of available tables organized by version (V2/V3).
+
 The script will load a "full" export once at the start. Once the backfill of the "full" export is complete, it will start importing the "incremental" exports.
 
 Sometimes the network is quiet and the parquet file is empty. When this happens, Neynar exports a `.empty` file. We had some troubles with schema detection with actually empty `.parquet` files and this was a simple solution.
