@@ -415,7 +415,7 @@ def import_parquet(
     new_steps = num_row_groups - start_row_group
 
     if new_steps == 0:
-        LOGGER.info("%s has already been imported", local_file)
+        LOGGER.debug("%s has already been imported", local_file)
         return
 
     if last_row_group_imported is not None:
@@ -590,7 +590,7 @@ def import_parquet(
 
     # TODO: datadog metrics here?
     if i is not None and num_row_groups == i + 1:
-        LOGGER.info(
+        LOGGER.debug(
             "finished import",
             extra={
                 "file_age_s": file_age_s,
