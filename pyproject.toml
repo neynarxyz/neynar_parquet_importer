@@ -33,7 +33,7 @@ dependencies = [
     "pydantic-settings>=2.6.1",
     "pygments",
     "python-dateutil",
-    "python-dotenv>=1.0.1",
+    "python-dotenv>=1.2.2",
     "python-json-logger>=2.0.7",
     "requests>=2.32.3",
     "rich",
