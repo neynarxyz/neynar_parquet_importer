@@ -21,7 +21,7 @@ dependencies = [
     "mdurl",
     "neo4j>=5.15.0",
     "numpy",
-    "orjson>=3.10.15",
+    "orjson>=3.11.8",
     "parso",
     "pexpect",
     "prompt-toolkit",
