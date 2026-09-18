@@ -173,9 +173,7 @@ class Settings(BaseSettings):
             f"{self.parquet_s3_database}/{self.parquet_s3_schema}/{self.npe_version}/"
         )
 
-        if self.npe_version == "v2":
-            assert self.incremental_duration == 300
-        elif self.npe_version == "v3":
+        if self.npe_version == "v3":
             prefix += f"{self.incremental_duration}/"
 
         return prefix
