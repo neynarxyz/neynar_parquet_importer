@@ -8,23 +8,31 @@ on:
       - '**.md'
       - '.gitignore'
 
+# Least privilege by default; the release job opts in to what it needs.
+permissions:
+  contents: read
+
 jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # push the release tag and create the GitHub release
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          # Don't leave the write token in .git/config where dependency
+          # install/build steps could read it; the tag push step authenticates
+          # explicitly instead.
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
-          cache: 'pip'
+          # No dependency cache in the release job (cache-poisoning hardening).
 
       - name: Install uv package manager
         run: |
@@ -41,7 +49,7 @@ jobs:
           VERSION=$(python -c "import tomli; print(tomli.load(open('pyproject.toml', 'rb'))['project']['version'])")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
-          
+
       - name: Install dependencies with uv
         run: |
           uv sync
@@ -54,38 +62,42 @@ jobs:
       - name: Check if tag exists
         id: check_tag
         run: |
-          TAG_EXISTS=$(git tag -l "v${{ steps.get_version.outputs.version }}" | wc -l)
+          TAG_EXISTS=$(git tag -l "v${VERSION}" | wc -l)
           if [ "$TAG_EXISTS" -gt "0" ]; then
             echo "tag_exists=true" >> $GITHUB_OUTPUT
-            echo "Tag v${{ steps.get_version.outputs.version }} already exists"
+            echo "Tag v${VERSION} already exists"
           else
             echo "tag_exists=false" >> $GITHUB_OUTPUT
-            echo "Tag v${{ steps.get_version.outputs.version }} does not exist"
+            echo "Tag v${VERSION} does not exist"
           fi
         env:
+          VERSION: ${{ steps.get_version.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create and push tag
         if: steps.check_tag.outputs.tag_exists == 'false'
         run: |
-          git tag -a "v${{ steps.get_version.outputs.version }}" -m "Release v${{ steps.get_version.outputs.version }}"
-          git push origin "v${{ steps.get_version.outputs.version }}"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=${AUTH_HEADER}" push origin "v${VERSION}"
         env:
+          VERSION: ${{ steps.get_version.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if release exists
         id: check_release
         run: |
-          EXISTS=$(gh release view v${{ steps.get_version.outputs.version }} > /dev/null 2>&1 && echo "true" || echo "false")
+          EXISTS=$(gh release view "v${VERSION}" > /dev/null 2>&1 && echo "true" || echo "false")
           echo "exists=$EXISTS" >> $GITHUB_OUTPUT
-          echo "Release v${{ steps.get_version.outputs.version }} exists: $EXISTS"
+          echo "Release v${VERSION} exists: $EXISTS"
         env:
+          VERSION: ${{ steps.get_version.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         if: steps.check_release.outputs.exists == 'false'
         id: create_release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: Release v${{ steps.get_version.outputs.version }}
@@ -106,7 +118,7 @@ jobs:
 
       - name: Upload Build Artifacts
         if: steps.check_release.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           files: |
