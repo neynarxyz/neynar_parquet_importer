@@ -129,3 +129,14 @@ def test_get_portal_pricing_cache_expiration():
 
             # Verify the API was called twice (initial call + call after cache expiration)
             assert mock_get.call_count == 2, f"Expected 2 API calls after cache expiration, but got {mock_get.call_count}"
+
+
+def test_get_url_has_no_double_slash():
+    client = NeynarApiClient(api_key="k", api_url="https://api.neynar.com/")
+
+    with patch.object(client.session, "get") as mock_get:
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {}
+        client.get("/portal/pricing")
+
+    assert mock_get.call_args.args[0] == "https://api.neynar.com/portal/pricing"

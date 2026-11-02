@@ -26,7 +26,7 @@ class NeynarApiClient:
         self.session.headers.update({"X-Api-Key": api_key})
 
     def get(self, endpoint: str):
-        url = f"{self.api_url}/{endpoint}"
+        url = f"{self.api_url}/{endpoint.lstrip('/')}"
 
         response = self.session.get(url)
 
