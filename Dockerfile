@@ -12,7 +12,7 @@ ENV UV_LINK_MODE=copy
 
 # Install system dependencies
 RUN apt-get -o Acquire::Retries=0 update && apt-get -o Acquire::Retries=0 install -y --only-upgrade apt && \
-    apt-get install -y --no-install-recommends \
+    apt-get -o Acquire::Retries=0 install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     && \
