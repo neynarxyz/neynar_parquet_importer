@@ -11,7 +11,8 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
 # Install system dependencies
-RUN apt-get update && \
+RUN echo 'Acquire::Retries "0";' > /etc/apt/apt.conf.d/99-cve-2026-109518 && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
